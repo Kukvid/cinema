@@ -1,0 +1,39 @@
+# .gitignore для корня проекта
+
+# Backend
+cinema-backend/venv/
+cinema-backend/__pycache__/
+cinema-backend/logs/
+cinema-backend/uploads/
+cinema-backend/*.db
+cinema-backend/*.log
+
+# Frontend
+cinema-frontend/node_modules/
+cinema-frontend/build/
+cinema-frontend/.next/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+postgres_data/
+redis_data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Documentation builds
+docs/_build/

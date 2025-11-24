@@ -1,0 +1,77 @@
+# .claudeignore - исключаем из контекста Claude
+
+# Dependencies
+backend/venv/
+backend/.venv/
+frontend/node_modules/
+frontend/.next/
+frontend/build/
+frontend/dist/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+backend/logs/
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Uploaded files
+backend/uploads/
+frontend/public/uploads/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.hypothesis/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# Migrations (можно включить, если нужно показать Claude)
+# backend/alembic/versions/*.py
+
+# Large files
+*.pdf
+*.xlsx
+*.xls
+*.zip
+*.tar.gz
+
+# Images (если много)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.svg
+
+# QR codes
+backend/uploads/qr_codes/

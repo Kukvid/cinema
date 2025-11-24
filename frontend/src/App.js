@@ -1,0 +1,112 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from '@mui/material/styles';
+import { CssBaseline, Box } from '@mui/material';
+import theme from './theme';
+import { AuthProvider } from './context/AuthContext';
+
+// Components
+import Header from './components/Header';
+import PrivateRoute from './components/PrivateRoute';
+
+// Public Pages
+import Home from './pages/Home';
+import FilmDetail from './pages/FilmDetail';
+import SessionBooking from './pages/SessionBooking';
+import Login from './pages/Login';
+import Register from './pages/Register';
+
+// User Pages
+import Profile from './pages/Profile';
+import MyTickets from './pages/MyTickets';
+
+// Admin Pages
+import Dashboard from './pages/admin/Dashboard';
+import CinemasManage from './pages/admin/CinemasManage';
+import FilmsManage from './pages/admin/FilmsManage';
+import SessionsManage from './pages/admin/SessionsManage';
+
+function App() {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <AuthProvider>
+        <BrowserRouter>
+          <Box
+            sx={{
+              minHeight: '100vh',
+              background: 'linear-gradient(180deg, #141414 0%, #1f1f1f 100%)',
+            }}
+          >
+            <Header />
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/" element={<Home />} />
+              <Route path="/films/:id" element={<FilmDetail />} />
+              <Route path="/sessions/:id/booking" element={<SessionBooking />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+
+              {/* User Protected Routes */}
+              <Route
+                path="/profile"
+                element={
+                  <PrivateRoute>
+                    <Profile />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/my-tickets"
+                element={
+                  <PrivateRoute>
+                    <MyTickets />
+                  </PrivateRoute>
+                }
+              />
+
+              {/* Admin Protected Routes */}
+              <Route
+                path="/admin"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <Dashboard />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/cinemas"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <CinemasManage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/films"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <FilmsManage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/sessions"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <SessionsManage />
+                  </PrivateRoute>
+                }
+              />
+
+              {/* Redirect */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Box>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
+  );
+}
+
+export default App;

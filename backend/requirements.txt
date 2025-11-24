@@ -1,0 +1,22 @@
+# Core
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+asyncpg==0.29.0               # для async PostgreSQL
+alembic==1.12.1
+
+# Validation & Security
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Utils
+python-dotenv==1.0.0
+qrcode[pil]==7.4.2
+reportlab==4.0.7              # для генерации PDF
+openpyxl==3.1.2               # для Excel отчетов
+Pillow==10.1.0                # для работы с изображениями
