@@ -71,7 +71,7 @@ psql --version        # PostgreSQL 14.x или выше
 ### Создание базы данных:
 ```bash
 # Войти в psql (потребуется пароль postgres)
-psql -U postgres
+`psql -U postgres`
 
 # В psql выполнить:
 CREATE DATABASE cinema_db;
@@ -79,13 +79,6 @@ CREATE USER cinema_user WITH PASSWORD 'cinema_password123';
 GRANT ALL PRIVILEGES ON DATABASE cinema_db TO cinema_user;
 \q
 ```
-
-**Альтернативный способ (одна команда):**
-```bash
-psql -U postgres -c "CREATE DATABASE cinema_db;"
-```
-
----
 
 ## ⚙️ Настройка Backend
 
@@ -98,17 +91,8 @@ cd backend
 ```bash
 # Windows
 python -m venv .venv
-.venv\Scripts\activate
-
-# Git Bash на Windows
-source .venv/Scripts/activate
-
-# Linux/Mac
-python3 -m venv .venv
-source .venv/bin/activate
+..\.venv\Scripts\activat
 ```
-
-**Подсказка:** После активации в терминале появится `(.venv)` в начале строки.
 
 ### Шаг 3: Установить зависимости
 ```bash

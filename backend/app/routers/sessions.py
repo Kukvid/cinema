@@ -36,7 +36,14 @@ async def get_sessions(
         query = query.filter(Session.film_id == film_id)
 
     if session_date:
-        query = query.filter(Session.session_date == session_date)
+        # Filter sessions that start on the given date
+        next_day = session_date + timedelta(days=1)
+        query = query.filter(
+            and_(
+                Session.start_datetime >= datetime.combine(session_date, datetime.min.time()),
+                Session.start_datetime < datetime.combine(next_day, datetime.min.time())
+            )
+        )
 
     if status_filter:
         query = query.filter(Session.status == status_filter)
@@ -126,9 +133,8 @@ async def get_session_seats(
         id=session.id,
         film_id=session.film_id,
         hall_id=session.hall_id,
-        session_date=session.session_date,
-        start_time=session.start_time,
-        end_time=session.end_time,
+        start_datetime=session.start_datetime,
+        end_datetime=session.end_datetime,
         ticket_price=session.ticket_price,
         status=session.status,
         available_seats_count=available_count,
@@ -164,28 +170,27 @@ async def create_session(
             detail=f"Hall with id {session_data.hall_id} not found"
         )
 
-    # Check for time conflicts in the same hall on the same date
+    # Check for time conflicts in the same hall
     result = await db.execute(
         select(Session).filter(
             and_(
                 Session.hall_id == session_data.hall_id,
-                Session.session_date == session_data.session_date,
                 Session.status != SessionStatus.CANCELLED,
                 or_(
                     # New session starts during existing session
                     and_(
-                        Session.start_time <= session_data.start_time,
-                        Session.end_time > session_data.start_time
+                        Session.start_datetime <= session_data.start_datetime,
+                        Session.end_datetime > session_data.start_datetime
                     ),
                     # New session ends during existing session
                     and_(
-                        Session.start_time < session_data.end_time,
-                        Session.end_time >= session_data.end_time
+                        Session.start_datetime < session_data.end_datetime,
+                        Session.end_datetime >= session_data.end_datetime
                     ),
                     # New session completely overlaps existing session
                     and_(
-                        Session.start_time >= session_data.start_time,
-                        Session.end_time <= session_data.end_time
+                        Session.start_datetime >= session_data.start_datetime,
+                        Session.end_datetime <= session_data.end_datetime
                     )
                 )
             )
@@ -202,9 +207,8 @@ async def create_session(
     new_session = Session(
         film_id=session_data.film_id,
         hall_id=session_data.hall_id,
-        session_date=session_data.session_date,
-        start_time=session_data.start_time,
-        end_time=session_data.end_time,
+        start_datetime=session_data.start_datetime,
+        end_datetime=session_data.end_datetime,
         ticket_price=session_data.ticket_price,
         status=session_data.status
     )

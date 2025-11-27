@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Date, Time, DECIMAL, ForeignKey, Enum as SQLEnum, Index, CheckConstraint
+from sqlalchemy import Column, Integer, DateTime, DECIMAL, ForeignKey, Enum as SQLEnum, Index, CheckConstraint
 from sqlalchemy.orm import relationship
 from .enums import SessionStatus
 from . import Base
@@ -11,9 +11,8 @@ class Session(Base):
     film_id = Column(Integer, ForeignKey("films.id", ondelete="CASCADE"), nullable=False)
     hall_id = Column(Integer, ForeignKey("halls.id", ondelete="CASCADE"), nullable=False)
 
-    session_date = Column(Date, nullable=False, index=True)
-    start_time = Column(Time, nullable=False)
-    end_time = Column(Time, nullable=False)
+    start_datetime = Column(DateTime, nullable=False, index=True)
+    end_datetime = Column(DateTime, nullable=False)
     ticket_price = Column(DECIMAL(8, 2), nullable=False)
     status = Column(SQLEnum(SessionStatus), default=SessionStatus.SCHEDULED, nullable=False)
 
@@ -26,8 +25,8 @@ class Session(Base):
     __table_args__ = (
         Index("idx_session_film", "film_id"),
         Index("idx_session_hall", "hall_id"),
-        Index("idx_session_date_hall", "session_date", "hall_id"),
-        Index("idx_session_date_time", "session_date", "start_time"),
-        CheckConstraint("end_time > start_time", name="check_session_times_valid"),
+        Index("idx_session_start_hall", "start_datetime", "hall_id"),
+        Index("idx_session_start_datetime", "start_datetime"),
+        CheckConstraint("end_datetime > start_datetime", name="check_session_times_valid"),
         CheckConstraint("ticket_price >= 0", name="check_ticket_price_positive"),
     )

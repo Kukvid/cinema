@@ -177,7 +177,7 @@ User (one) → (many) Report
 - `idx_hall_cinema_number` - UNIQUE(cinema_id, hall_number)
 - `idx_seat_hall_row_number` - UNIQUE(hall_id, row_number, seat_number)
 - `idx_ticket_session_seat` - UNIQUE(session_id, seat_id)
-- `idx_session_date_hall` - (session_date, hall_id)
+- `idx_session_start_hall` - (start_datetime, hall_id)
 - `idx_cinema_city_status` - (city, status)
 - `idx_film_genre_year` - (genre, release_year)
 
@@ -233,7 +233,7 @@ All status fields use Enum classes defined in `app/models/enums.py`:
 - ConcessionPreorder: `quantity > 0`, `unit_price >= 0`, `total_price >= 0`
 
 ### Date/Time Constraints
-- Session: `end_time > start_time`
+- Session: `end_datetime > start_datetime`
 - RentalContract: `rental_end_date > rental_start_date`
 - Promocode: `valid_until >= valid_from`
 

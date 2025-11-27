@@ -18,7 +18,7 @@ class Ticket(Base):
     purchase_date = Column(DateTime, nullable=False)
     sales_channel = Column(SQLEnum(SalesChannel), nullable=False)
     status = Column(SQLEnum(TicketStatus), default=TicketStatus.RESERVED, nullable=False)
-    qr_code = Column(String(500))
+    qr_code = Column(String(2000))
     validation_date = Column(DateTime)
 
     # Relationships

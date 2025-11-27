@@ -1,5 +1,16 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BeforeValidator
 from functools import lru_cache
+from typing import List, Union, Annotated
+
+
+def parse_cors_origins(v: Union[str, List[str]]) -> List[str]:
+    """Парсинг CORS_ORIGINS из строки с разделителями-запятыми или списка"""
+    if isinstance(v, str):
+        return [origin.strip() for origin in v.split(',')]
+    elif isinstance(v, list):
+        return v
+    return []
 
 
 class Settings(BaseSettings):
@@ -18,13 +29,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # CORS
-    CORS_ORIGINS: list = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-    ]
+    # CORS - используем Union чтобы избежать автоматического JSON парсинга
+    CORS_ORIGINS: Annotated[
+        Union[str, List[str]],
+        BeforeValidator(parse_cors_origins)
+    ] = "http://localhost:3000,http://localhost:5173"
 
     # Bonus System
     BONUS_ACCRUAL_PERCENTAGE: int = 10
@@ -44,9 +53,11 @@ class Settings(BaseSettings):
     # Reports
     REPORTS_DIR: str = "reports"
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        env_parse_none_str='null'
+    )
 
 
 @lru_cache()

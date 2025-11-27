@@ -5,7 +5,8 @@
       "Bash(mkdir:*)",
       "Bash(tree:*)",
       "Bash(findstr:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(python seed.py:*)"
     ],
     "deny": [],
     "ask": []

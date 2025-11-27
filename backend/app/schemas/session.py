@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import datetime, date
 from typing import Optional, List
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -9,16 +9,15 @@ from .seat import SeatWithStatus
 
 # Base schema with common fields
 class SessionBase(BaseModel):
-    session_date: date
-    start_time: time
-    end_time: time
+    start_datetime: datetime
+    end_datetime: datetime
     ticket_price: Decimal = Field(..., ge=0, description="Ticket price must be non-negative")
 
-    @field_validator('end_time')
+    @field_validator('end_datetime')
     @classmethod
     def validate_session_times(cls, v, info):
-        if 'start_time' in info.data and v <= info.data['start_time']:
-            raise ValueError('end_time must be after start_time')
+        if 'start_datetime' in info.data and v <= info.data['start_datetime']:
+            raise ValueError('end_datetime must be after start_datetime')
         return v
 
 
@@ -31,9 +30,8 @@ class SessionCreate(SessionBase):
 
 # Schema for updating a session
 class SessionUpdate(BaseModel):
-    session_date: Optional[date] = None
-    start_time: Optional[time] = None
-    end_time: Optional[time] = None
+    start_datetime: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
     ticket_price: Optional[Decimal] = Field(None, ge=0)
     status: Optional[SessionStatus] = None
 
@@ -59,5 +57,5 @@ class SessionWithSeats(SessionResponse):
 class SessionFilter(BaseModel):
     cinema_id: Optional[int] = None
     film_id: Optional[int] = None
-    session_date: Optional[date] = None
+    date: Optional[date] = None
     status: Optional[SessionStatus] = None

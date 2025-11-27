@@ -765,12 +765,13 @@ async def create_sessions(db: AsyncSession, films: list, halls: list):
     print("\n9. Creating sessions...")
 
     sessions = []
-    session_times = [
-        (time(10, 0), time(12, 30)),
-        (time(13, 0), time(15, 30)),
-        (time(16, 0), time(18, 30)),
-        (time(19, 0), time(21, 30)),
-        (time(22, 0), time(0, 30)),
+    # Define session start times (hours) and durations (minutes)
+    session_slots = [
+        (10, 0, 150),   # 10:00 - 12:30
+        (13, 0, 150),   # 13:00 - 15:30
+        (16, 0, 150),   # 16:00 - 18:30
+        (19, 0, 150),   # 19:00 - 21:30
+        (22, 0, 150),   # 22:00 - 00:30 (next day)
     ]
 
     # Create sessions for next 7 days
@@ -780,13 +781,17 @@ async def create_sessions(db: AsyncSession, films: list, halls: list):
         # For each hall, create 3-5 sessions
         for hall in halls:
             # Select random films for this hall today
-            daily_films = random.sample(films, min(len(session_times), len(films)))
+            daily_films = random.sample(films, min(len(session_slots), len(films)))
 
             for i, film in enumerate(daily_films):
-                if i >= len(session_times):
+                if i >= len(session_slots):
                     break
 
-                start, end = session_times[i]
+                start_hour, start_minute, duration_minutes = session_slots[i]
+
+                # Create start and end datetime
+                start_datetime = datetime.combine(session_date, time(start_hour, start_minute))
+                end_datetime = start_datetime + timedelta(minutes=duration_minutes)
 
                 # Price varies by time and hall type
                 base_price = 400
@@ -796,7 +801,7 @@ async def create_sessions(db: AsyncSession, films: list, halls: list):
                     base_price = 600
 
                 # Evening sessions are more expensive
-                if start.hour >= 18:
+                if start_hour >= 18:
                     base_price += 100
 
                 # Weekend premium
@@ -806,9 +811,8 @@ async def create_sessions(db: AsyncSession, films: list, halls: list):
                 session = Session(
                     film_id=film.id,
                     hall_id=hall.id,
-                    session_date=session_date,
-                    start_time=start,
-                    end_time=end,
+                    start_datetime=start_datetime,
+                    end_datetime=end_datetime,
                     ticket_price=Decimal(str(base_price)),
                     status=SessionStatus.SCHEDULED,
                 )
@@ -1123,7 +1127,6 @@ async def create_orders_and_tickets(db: AsyncSession, users: list, sessions: lis
                         transaction_type=BonusTransactionType.ACCRUAL,
                         amount=bonus_points,
                         transaction_date=created_at,
-                        description=f"Начисление за заказ {order.order_number}",
                     )
                     db.add(bonus_transaction)
                     bonus_transactions.append(bonus_transaction)
