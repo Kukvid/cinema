@@ -12,7 +12,6 @@ import {
 import {
   AccessTime as TimeIcon,
   Place as PlaceIcon,
-  AttachMoney as PriceIcon,
   EventSeat as SeatIcon,
 } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
@@ -130,9 +129,15 @@ const SessionList = ({ sessions, groupByDate = true }) => {
                       <Grid item xs={12} sm={2}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <SeatIcon sx={{ fontSize: 20 }} />
-                          <Typography variant="body2" color="text.secondary">
-                            {session.available_seats !== undefined
-                              ? `${session.available_seats} мест`
+                          <Typography
+                            variant="body2"
+                            color={session.available_seats > 0 ? "text.secondary" : "error"}
+                            sx={{ fontWeight: session.available_seats === 0 ? 700 : 400 }}
+                          >
+                            {session.available_seats !== undefined && session.available_seats !== null
+                              ? session.available_seats === 0
+                                ? 'Нет мест'
+                                : `${session.available_seats} мест`
                               : 'Доступно'}
                           </Typography>
                         </Box>
@@ -144,17 +149,27 @@ const SessionList = ({ sessions, groupByDate = true }) => {
                           variant="contained"
                           fullWidth
                           onClick={() => handleBookSession(session.id)}
+                          disabled={session.available_seats === 0}
                           sx={{
-                            background: 'linear-gradient(135deg, #e50914 0%, #b00710 100%)',
+                            background: session.available_seats === 0
+                              ? 'rgba(255, 255, 255, 0.1)'
+                              : 'linear-gradient(135deg, #e50914 0%, #b00710 100%)',
                             fontWeight: 600,
                             '&:hover': {
-                              background: 'linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)',
-                              transform: 'translateY(-2px)',
-                              boxShadow: '0 4px 12px rgba(229, 9, 20, 0.4)',
+                              background: session.available_seats === 0
+                                ? 'rgba(255, 255, 255, 0.1)'
+                                : 'linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)',
+                              transform: session.available_seats === 0 ? 'none' : 'translateY(-2px)',
+                              boxShadow: session.available_seats === 0
+                                ? 'none'
+                                : '0 4px 12px rgba(229, 9, 20, 0.4)',
+                            },
+                            '&.Mui-disabled': {
+                              color: 'rgba(255, 255, 255, 0.3)',
                             },
                           }}
                         >
-                          Выбрать
+                          {session.available_seats === 0 ? 'Нет мест' : 'Выбрать'}
                         </Button>
                       </Grid>
                     </Grid>

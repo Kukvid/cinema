@@ -45,7 +45,7 @@ class HallWithCinema(BaseModel):
     id: int
     name: Optional[str] = None
     hall_number: str
-    available_seats_count: int
+    capacity: int
     cinema: Optional[CinemaResponse] = None
 
 
@@ -58,6 +58,7 @@ class SessionResponse(SessionBase):
     hall_id: int
     status: SessionStatus
     hall: Optional[HallWithCinema] = None
+    available_seats: Optional[int] = None
 
 
 # Schema for session with available seats

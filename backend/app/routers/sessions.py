@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
@@ -19,6 +19,38 @@ from app.schemas.seat import SeatWithStatus
 from app.routers.auth import get_current_active_user
 
 router = APIRouter()
+
+
+async def calculate_available_seats(sessions: List[Session], db: AsyncSession):
+    """Calculate available seats for each session."""
+    if not sessions:
+        return {}
+
+    session_ids = [s.id for s in sessions]
+
+    # Get booked tickets count for all sessions in one query
+    booked_tickets_query = select(
+        Ticket.session_id,
+        func.count(Ticket.id).label('booked_count')
+    ).filter(
+        Ticket.session_id.in_(session_ids),
+        Ticket.status.in_([TicketStatus.RESERVED, TicketStatus.PAID])
+    ).group_by(Ticket.session_id)
+
+    result = await db.execute(booked_tickets_query)
+    booked_counts = {row.session_id: row.booked_count for row in result}
+
+    # Calculate available seats for each session
+    available_seats_map = {}
+    for session in sessions:
+        if session.hall:
+            total_capacity = session.hall.capacity
+            booked = booked_counts.get(session.id, 0)
+            available_seats_map[session.id] = max(0, total_capacity - booked)
+        else:
+            available_seats_map[session.id] = 0
+
+    return available_seats_map
 
 
 @router.get("", response_model=List[SessionResponse])
@@ -59,7 +91,18 @@ async def get_sessions(
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     sessions = result.scalars().unique().all()
-    return sessions
+
+    # Calculate available seats for all sessions
+    available_seats_map = await calculate_available_seats(sessions, db)
+
+    # Convert to response format with available_seats
+    response_sessions = []
+    for session in sessions:
+        session_dict = SessionResponse.model_validate(session).model_dump()
+        session_dict['available_seats'] = available_seats_map.get(session.id, 0)
+        response_sessions.append(SessionResponse(**session_dict))
+
+    return response_sessions
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
@@ -81,7 +124,14 @@ async def get_session(
             detail=f"Session with id {session_id} not found"
         )
 
-    return session
+    # Calculate available seats
+    available_seats_map = await calculate_available_seats([session], db)
+
+    # Convert to response format with available_seats
+    session_dict = SessionResponse.model_validate(session).model_dump()
+    session_dict['available_seats'] = available_seats_map.get(session.id, 0)
+
+    return SessionResponse(**session_dict)
 
 
 @router.get("/{session_id}/seats", response_model=SessionWithSeats)
