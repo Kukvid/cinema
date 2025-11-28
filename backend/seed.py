@@ -1684,27 +1684,22 @@ async def create_food_categories(db: AsyncSession):
     categories_data = [
         {
             "name": "Попкорн",
-            "icon": "popcorn",
             "display_order": 1,
         },
         {
             "name": "Напитки",
-            "icon": "local_drink",
             "display_order": 2,
         },
         {
             "name": "Сладости",
-            "icon": "candy",
             "display_order": 3,
         },
         {
             "name": "Снэки",
-            "icon": "fastfood",
             "display_order": 4,
         },
         {
             "name": "Комбо",
-            "icon": "set_meal",
             "display_order": 5,
         },
     ]
@@ -1744,9 +1739,9 @@ async def create_concession_items(db: AsyncSession, cinemas: list, categories: l
          "calories": 420, "category": "Напитки",
          "image_url": "https://images.unsplash.com/photo-1554866585-cd94860890b7?w=400"},
         {"name": "Sprite 0.5л", "description": "Лимонад", "price": "120.00", "portion_size": "0.5L", "calories": 200,
-         "category": "Напитки", "image_url": "https://images.unsplash.com/photo-1625772452859-1c03d5bf1137?w=400"},
+         "category": "Напитки", "image_url": "https://images.unsplash.com/photo-1680404005217-a441afdefe83?q=80&w=928&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"},
         {"name": "Sprite 1л", "description": "Лимонад", "price": "180.00", "portion_size": "1L", "calories": 400,
-         "category": "Напитки", "image_url": "https://images.unsplash.com/photo-1625772452859-1c03d5bf1137?w=400"},
+         "category": "Напитки", "image_url": "https://images.unsplash.com/photo-1680404005217-a441afdefe83?q=80&w=928&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"},
         {"name": "Fanta 0.5л", "description": "Апельсиновый напиток", "price": "120.00", "portion_size": "0.5L",
          "calories": 220, "category": "Напитки",
          "image_url": "https://images.unsplash.com/photo-1624517452488-04869289c4ca?w=400"},
@@ -1766,13 +1761,13 @@ async def create_concession_items(db: AsyncSession, cinemas: list, categories: l
          "calories": 0, "category": "Напитки",
          "image_url": "https://images.unsplash.com/photo-1523362628745-0c100150b504?w=400"},
         {"name": "M&M's", "description": "Шоколадное драже", "price": "150.00", "portion_size": "90г", "calories": 450,
-         "category": "Сладости", "image_url": "https://images.unsplash.com/photo-1585735265050-bd07c35a8a1f?w=400"},
+         "category": "Сладости", "image_url": "https://images.unsplash.com/photo-1534705867302-2a41394d2a3b?q=80&w=1480&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"},
         {"name": "Skittles", "description": "Жевательные конфеты", "price": "150.00", "portion_size": "95г",
          "calories": 380, "category": "Сладости",
          "image_url": "https://images.unsplash.com/photo-1582058091505-f87a2e55a40f?w=400"},
         {"name": "Хот-дог", "description": "Сосиска в булочке", "price": "200.00", "portion_size": "1шт",
          "calories": 350, "category": "Снэки",
-         "image_url": "https://images.unsplash.com/photo-1612392166886-ee6c24bac2b4?w=400"},
+         "image_url": "https://images.unsplash.com/photo-1638368593249-7cadb261e8b3?q=80&w=782&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"},
         {"name": "Начос с сыром", "description": "Кукурузные чипсы с сырным соусом", "price": "300.00",
          "portion_size": "200г", "calories": 550, "category": "Снэки",
          "image_url": "https://images.unsplash.com/photo-1513456852971-30c0b8199d4d?w=400"},
@@ -1787,7 +1782,7 @@ async def create_concession_items(db: AsyncSession, cinemas: list, categories: l
          "image_url": "https://images.unsplash.com/photo-1505686994434-e3cc5abf1330?w=400"},
         {"name": "Комбо Премиум", "description": "Попкорн большой + 2 напитка на выбор", "price": "550.00",
          "portion_size": "набор", "calories": 1220, "category": "Комбо",
-         "image_url": "https://images.unsplash.com/photo-1607013251379-e6eecfffe234?w=400"},
+         "image_url": "https://images.unsplash.com/photo-1691480213129-106b2c7d1ee8?q=80&w=1480&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"},
     ]
 
     items = []

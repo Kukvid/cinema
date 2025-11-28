@@ -1,4 +1,4 @@
-# Quick Start Guide - Cinema Management System
+N# Quick Start Guide - Cinema Management System
 
 ## Быстрый старт (5 минут)
 

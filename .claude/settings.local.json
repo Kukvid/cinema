@@ -12,7 +12,8 @@
       "Bash(npm run build:*)",
       "Bash(find:*)",
       "Bash(source ../.venv/Scripts/activate)",
-      "Bash(python -c:*)"
+      "Bash(python -c:*)",
+      "Bash(alembic current:*)"
     ],
     "deny": [],
     "ask": []

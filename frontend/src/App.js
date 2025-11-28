@@ -25,6 +25,7 @@ import Dashboard from './pages/admin/Dashboard';
 import CinemasManage from './pages/admin/CinemasManage';
 import FilmsManage from './pages/admin/FilmsManage';
 import SessionsManage from './pages/admin/SessionsManage';
+import FoodCategoriesManage from './pages/admin/FoodCategoriesManage';
 
 function App() {
   return (
@@ -95,6 +96,14 @@ function App() {
                 element={
                   <PrivateRoute requireAdmin>
                     <SessionsManage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/food-categories"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <FoodCategoriesManage />
                   </PrivateRoute>
                 }
               />

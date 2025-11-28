@@ -69,10 +69,7 @@ async def create_food_category(
 
     new_category = FoodCategory(
         name=category_data.name,
-        description=category_data.description,
-        icon=category_data.icon,
-        display_order=category_data.display_order,
-        is_active=category_data.is_active
+        display_order=category_data.display_order
     )
 
     db.add(new_category)

@@ -19,6 +19,7 @@ import {
   Event as EventIcon,
   Place as PlaceIcon,
   Fastfood as FoodIcon,
+  Category as CategoryIcon,
   TrendingUp as TrendingIcon,
   People as PeopleIcon,
   AttachMoney as MoneyIcon,
@@ -83,6 +84,12 @@ const Dashboard = () => {
       icon: <FoodIcon />,
       path: '/admin/concessions',
       description: 'Товары кинобара и их цены',
+    },
+    {
+      title: 'Категории кинобара',
+      icon: <CategoryIcon />,
+      path: '/admin/food-categories',
+      description: 'Управление категориями товаров',
     },
   ];
 
