@@ -21,6 +21,7 @@ from .promocode import Promocode
 from .order import Order
 from .payment import Payment
 from .concession_item import ConcessionItem
+from .food_category import FoodCategory
 from .concession_preorder import ConcessionPreorder
 from .report import Report
 
@@ -45,6 +46,7 @@ __all__ = [
     "Order",
     "Payment",
     "ConcessionItem",
+    "FoodCategory",
     "ConcessionPreorder",
     "Report",
 ]

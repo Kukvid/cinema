@@ -3,6 +3,7 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
 
 from app.models.enums import ConcessionItemStatus
+from app.schemas.food_category import FoodCategoryResponse
 
 
 # Base schema with common fields
@@ -18,6 +19,7 @@ class ConcessionItemBase(BaseModel):
 # Schema for creating a concession item
 class ConcessionItemCreate(ConcessionItemBase):
     cinema_id: int = Field(..., gt=0)
+    category_id: int = Field(..., gt=0)
     stock_quantity: int = Field(default=0, ge=0)
     status: ConcessionItemStatus = ConcessionItemStatus.AVAILABLE
 
@@ -40,6 +42,8 @@ class ConcessionItemResponse(ConcessionItemBase):
 
     id: int
     cinema_id: int
+    category_id: int
+    category: Optional[FoodCategoryResponse] = None
     stock_quantity: int
     status: ConcessionItemStatus
 

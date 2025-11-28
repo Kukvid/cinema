@@ -3,6 +3,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.concession_item import ConcessionItem
@@ -29,7 +30,7 @@ async def get_concession_items(
     db: AsyncSession = Depends(get_db)
 ):
     """Get list of concession items."""
-    query = select(ConcessionItem)
+    query = select(ConcessionItem).options(selectinload(ConcessionItem.category))
 
     if cinema_id:
         query = query.filter(ConcessionItem.cinema_id == cinema_id)
@@ -50,7 +51,11 @@ async def get_concession_item(
     db: AsyncSession = Depends(get_db)
 ):
     """Get concession item by ID."""
-    result = await db.execute(select(ConcessionItem).filter(ConcessionItem.id == item_id))
+    result = await db.execute(
+        select(ConcessionItem)
+        .options(selectinload(ConcessionItem.category))
+        .filter(ConcessionItem.id == item_id)
+    )
     item = result.scalar_one_or_none()
 
     if not item:
@@ -71,6 +76,7 @@ async def create_concession_item(
     """Create a new concession item."""
     new_item = ConcessionItem(
         cinema_id=item_data.cinema_id,
+        category_id=item_data.category_id,
         name=item_data.name,
         description=item_data.description,
         price=item_data.price,

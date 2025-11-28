@@ -51,7 +51,7 @@ async def health_check():
 # Include routers
 from app.routers import (
     auth, cinemas, halls, films, genres, sessions,
-    bookings, concessions, distributors, contracts
+    bookings, concessions, distributors, contracts, food_categories
 )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
@@ -62,6 +62,7 @@ app.include_router(genres.router, prefix="/api/v1/genres", tags=["Genres"])
 app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["Sessions"])
 app.include_router(bookings.router, prefix="/api/v1/bookings", tags=["Bookings"])
 app.include_router(concessions.router, prefix="/api/v1/concessions", tags=["Concessions"])
+app.include_router(food_categories.router, prefix="/api/v1/food-categories", tags=["Food Categories"])
 app.include_router(distributors.router, prefix="/api/v1/distributors", tags=["Distributors"])
 app.include_router(contracts.router, prefix="/api/v1/contracts", tags=["Contracts"])
 

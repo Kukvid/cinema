@@ -10,7 +10,9 @@
       "Bash(alembic downgrade:*)",
       "Bash(alembic upgrade:*)",
       "Bash(npm run build:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(source ../.venv/Scripts/activate)",
+      "Bash(python -c:*)"
     ],
     "deny": [],
     "ask": []

@@ -27,6 +27,7 @@ from app.models.bonus_transaction import BonusTransaction
 from app.models.session import Session
 from app.models.promocode import Promocode
 from app.models.concession_item import ConcessionItem
+from app.models.food_category import FoodCategory
 from app.models.order import Order
 from app.models.ticket import Ticket
 from app.models.payment import Payment
@@ -57,6 +58,7 @@ async def clear_database(db: AsyncSession):
         RentalContract,
         Promocode,
         ConcessionItem,
+        FoodCategory,
         BonusAccount,
         User,
         Seat,
@@ -1675,35 +1677,129 @@ async def create_promocodes(db: AsyncSession):
     return promocodes
 
 
-async def create_concession_items(db: AsyncSession, cinemas: list):
+async def create_food_categories(db: AsyncSession):
+    """Create food categories"""
+    print("\n11. Creating food categories...")
+
+    categories_data = [
+        {
+            "name": "Попкорн",
+            "icon": "popcorn",
+            "display_order": 1,
+        },
+        {
+            "name": "Напитки",
+            "icon": "local_drink",
+            "display_order": 2,
+        },
+        {
+            "name": "Сладости",
+            "icon": "candy",
+            "display_order": 3,
+        },
+        {
+            "name": "Снэки",
+            "icon": "fastfood",
+            "display_order": 4,
+        },
+        {
+            "name": "Комбо",
+            "icon": "set_meal",
+            "display_order": 5,
+        },
+    ]
+
+    categories = []
+    for category_data in categories_data:
+        category = FoodCategory(**category_data)
+        db.add(category)
+        categories.append(category)
+
+    await db.flush()
+    print(f"   Created {len(categories)} food categories")
+    return categories
+
+
+async def create_concession_items(db: AsyncSession, cinemas: list, categories: list):
     """Create concession items"""
-    print("\n11. Creating concession items...")
+    print("\n12. Creating concession items...")
+
+    # Create a category mapping for easy lookup
+    category_map = {cat.name: cat.id for cat in categories}
 
     items_template = [
-        {"name": "Попкорн маленький", "description": "Классический попкорн", "price": "150.00", "portion_size": "0.5L", "calories": 250},
-        {"name": "Попкорн средний", "description": "Классический попкорн", "price": "250.00", "portion_size": "1L", "calories": 450},
-        {"name": "Попкорн большой", "description": "Классический попкорн", "price": "350.00", "portion_size": "2L", "calories": 800},
-        {"name": "Coca-Cola 0.5л", "description": "Прохладительный напиток", "price": "120.00", "portion_size": "0.5L", "calories": 210},
-        {"name": "Coca-Cola 1л", "description": "Прохладительный напиток", "price": "180.00", "portion_size": "1L", "calories": 420},
-        {"name": "Sprite 0.5л", "description": "Лимонад", "price": "120.00", "portion_size": "0.5L", "calories": 200},
-        {"name": "Sprite 1л", "description": "Лимонад", "price": "180.00", "portion_size": "1L", "calories": 400},
-        {"name": "Fanta 0.5л", "description": "Апельсиновый напиток", "price": "120.00", "portion_size": "0.5L", "calories": 220},
-        {"name": "Fanta 1л", "description": "Апельсиновый напиток", "price": "180.00", "portion_size": "1L", "calories": 440},
-        {"name": "Хот-дог", "description": "Сосиска в булочке", "price": "200.00", "portion_size": "1шт", "calories": 350},
-        {"name": "Начос с сыром", "description": "Кукурузные чипсы с сырным соусом", "price": "300.00", "portion_size": "200г", "calories": 550},
-        {"name": "M&M's", "description": "Шоколадное драже", "price": "150.00", "portion_size": "90г", "calories": 450},
-        {"name": "Skittles", "description": "Жевательные конфеты", "price": "150.00", "portion_size": "95г", "calories": 380},
-        {"name": "Вода негазированная", "description": "Питьевая вода", "price": "80.00", "portion_size": "0.5L", "calories": 0},
-        {"name": "Вода газированная", "description": "Газированная вода", "price": "80.00", "portion_size": "0.5L", "calories": 0},
-        {"name": "Сэндвич с курицей", "description": "Свежий сэндвич", "price": "250.00", "portion_size": "1шт", "calories": 420},
-        {"name": "Картофель фри", "description": "Жареный картофель", "price": "180.00", "portion_size": "150г", "calories": 380},
-        {"name": "Кофе американо", "description": "Черный кофе", "price": "150.00", "portion_size": "0.3L", "calories": 5},
-        {"name": "Капучино", "description": "Кофе с молоком", "price": "200.00", "portion_size": "0.3L", "calories": 120},
+        {"name": "Попкорн маленький", "description": "Классический попкорн", "price": "150.00", "portion_size": "0.5L",
+         "calories": 250, "category": "Попкорн",
+         "image_url": "https://images.unsplash.com/photo-1585647347384-2593bc35786b?w=400"},
+        {"name": "Попкорн средний", "description": "Классический попкорн", "price": "250.00", "portion_size": "1L",
+         "calories": 450, "category": "Попкорн",
+         "image_url": "https://images.unsplash.com/photo-1585647347384-2593bc35786b?w=400"},
+        {"name": "Попкорн большой", "description": "Классический попкорн", "price": "350.00", "portion_size": "2L",
+         "calories": 800, "category": "Попкорн",
+         "image_url": "https://images.unsplash.com/photo-1585647347384-2593bc35786b?w=400"},
+        {"name": "Coca-Cola 0.5л", "description": "Прохладительный напиток", "price": "120.00", "portion_size": "0.5L",
+         "calories": 210, "category": "Напитки",
+         "image_url": "https://images.unsplash.com/photo-1554866585-cd94860890b7?w=400"},
+        {"name": "Coca-Cola 1л", "description": "Прохладительный напиток", "price": "180.00", "portion_size": "1L",
+         "calories": 420, "category": "Напитки",
+         "image_url": "https://images.unsplash.com/photo-1554866585-cd94860890b7?w=400"},
+        {"name": "Sprite 0.5л", "description": "Лимонад", "price": "120.00", "portion_size": "0.5L", "calories": 200,
+         "category": "Напитки", "image_url": "https://images.unsplash.com/photo-1625772452859-1c03d5bf1137?w=400"},
+        {"name": "Sprite 1л", "description": "Лимонад", "price": "180.00", "portion_size": "1L", "calories": 400,
+         "category": "Напитки", "image_url": "https://images.unsplash.com/photo-1625772452859-1c03d5bf1137?w=400"},
+        {"name": "Fanta 0.5л", "description": "Апельсиновый напиток", "price": "120.00", "portion_size": "0.5L",
+         "calories": 220, "category": "Напитки",
+         "image_url": "https://images.unsplash.com/photo-1624517452488-04869289c4ca?w=400"},
+        {"name": "Fanta 1л", "description": "Апельсиновый напиток", "price": "180.00", "portion_size": "1L",
+         "calories": 440, "category": "Напитки",
+         "image_url": "https://images.unsplash.com/photo-1624517452488-04869289c4ca?w=400"},
+        {"name": "Кофе американо", "description": "Черный кофе", "price": "150.00", "portion_size": "0.3L",
+         "calories": 5, "category": "Напитки",
+         "image_url": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400"},
+        {"name": "Капучино", "description": "Кофе с молоком", "price": "200.00", "portion_size": "0.3L",
+         "calories": 120, "category": "Напитки",
+         "image_url": "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=400"},
+        {"name": "Вода негазированная", "description": "Питьевая вода", "price": "80.00", "portion_size": "0.5L",
+         "calories": 0, "category": "Напитки",
+         "image_url": "https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=400"},
+        {"name": "Вода газированная", "description": "Газированная вода", "price": "80.00", "portion_size": "0.5L",
+         "calories": 0, "category": "Напитки",
+         "image_url": "https://images.unsplash.com/photo-1523362628745-0c100150b504?w=400"},
+        {"name": "M&M's", "description": "Шоколадное драже", "price": "150.00", "portion_size": "90г", "calories": 450,
+         "category": "Сладости", "image_url": "https://images.unsplash.com/photo-1585735265050-bd07c35a8a1f?w=400"},
+        {"name": "Skittles", "description": "Жевательные конфеты", "price": "150.00", "portion_size": "95г",
+         "calories": 380, "category": "Сладости",
+         "image_url": "https://images.unsplash.com/photo-1582058091505-f87a2e55a40f?w=400"},
+        {"name": "Хот-дог", "description": "Сосиска в булочке", "price": "200.00", "portion_size": "1шт",
+         "calories": 350, "category": "Снэки",
+         "image_url": "https://images.unsplash.com/photo-1612392166886-ee6c24bac2b4?w=400"},
+        {"name": "Начос с сыром", "description": "Кукурузные чипсы с сырным соусом", "price": "300.00",
+         "portion_size": "200г", "calories": 550, "category": "Снэки",
+         "image_url": "https://images.unsplash.com/photo-1513456852971-30c0b8199d4d?w=400"},
+        {"name": "Сэндвич с курицей", "description": "Свежий сэндвич", "price": "250.00", "portion_size": "1шт",
+         "calories": 420, "category": "Снэки",
+         "image_url": "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=400"},
+        {"name": "Картофель фри", "description": "Жареный картофель", "price": "180.00", "portion_size": "150г",
+         "calories": 380, "category": "Снэки",
+         "image_url": "https://images.unsplash.com/photo-1598679253544-2c97992403ea?w=400"},
+        {"name": "Комбо Попкорн+Кола", "description": "Попкорн средний + Coca-Cola 0.5л", "price": "320.00",
+         "portion_size": "набор", "calories": 660, "category": "Комбо",
+         "image_url": "https://images.unsplash.com/photo-1505686994434-e3cc5abf1330?w=400"},
+        {"name": "Комбо Премиум", "description": "Попкорн большой + 2 напитка на выбор", "price": "550.00",
+         "portion_size": "набор", "calories": 1220, "category": "Комбо",
+         "image_url": "https://images.unsplash.com/photo-1607013251379-e6eecfffe234?w=400"},
     ]
 
     items = []
     for cinema in cinemas:
         for item_template in items_template:
+            category_name = item_template["category"]
+            category_id = category_map.get(category_name)
+
+            if not category_id:
+                print(f"Warning: Category '{category_name}' not found for item '{item_template['name']}'")
+                continue
+
             item = ConcessionItem(
                 cinema_id=cinema.id,
                 name=item_template["name"],
@@ -1711,8 +1807,10 @@ async def create_concession_items(db: AsyncSession, cinemas: list):
                 price=Decimal(item_template["price"]),
                 portion_size=item_template["portion_size"],
                 calories=item_template["calories"],
+                image_url=item_template.get("image_url"),
                 stock_quantity=random.randint(50, 200),
                 status=ConcessionItemStatus.AVAILABLE,
+                category_id=category_id,
             )
             db.add(item)
             items.append(item)
@@ -1917,7 +2015,8 @@ async def seed_all():
             bonus_accounts = await create_bonus_accounts(db, users)
             sessions = await create_sessions(db, films, halls)
             promocodes = await create_promocodes(db)
-            concession_items = await create_concession_items(db, cinemas)
+            food_categories = await create_food_categories(db)
+            concession_items = await create_concession_items(db, cinemas, food_categories)
             orders, tickets, payments = await create_orders_and_tickets(
                 db, users, sessions, promocodes, concession_items
             )
@@ -1939,6 +2038,7 @@ async def seed_all():
             print(f"  - Bonus Accounts: {len(bonus_accounts)}")
             print(f"  - Sessions: {len(sessions)}")
             print(f"  - Promocodes: {len(promocodes)}")
+            print(f"  - Food Categories: {len(food_categories)}")
             print(f"  - Concession Items: {len(concession_items)}")
             print(f"  - Orders: {len(orders)}")
             print(f"  - Tickets: {len(tickets)}")
