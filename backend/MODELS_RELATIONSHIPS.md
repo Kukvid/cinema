@@ -7,35 +7,36 @@
 2. **Hall** - Залы
 3. **Seat** - Места
 
-### Films & Distribution (4 models)
+### Films & Distribution (5 models)
 4. **Film** - Фильмы
-5. **Distributor** - Дистрибьюторы
-6. **RentalContract** - Договоры проката
-7. **PaymentHistory** - История расчетов с дистрибьюторами
+5. **Genre** - Жанры
+6. **Distributor** - Дистрибьюторы
+7. **RentalContract** - Договоры проката
+8. **PaymentHistory** - История расчетов с дистрибьюторами
 
 ### Sessions & Tickets (2 models)
-8. **Session** - Сеансы
-9. **Ticket** - Билеты
+9. **Session** - Сеансы
+10. **Ticket** - Билеты
 
 ### Users & Roles (5 models)
-10. **User** - Пользователи
-11. **Role** - Роли
-12. **BonusAccount** - Бонусные счета
-13. **BonusTransaction** - Транзакции бонусов
-14. **Promocode** - Промокоды
+11. **User** - Пользователи
+12. **Role** - Роли
+13. **BonusAccount** - Бонусные счета
+14. **BonusTransaction** - Транзакции бонусов
+15. **Promocode** - Промокоды
 
 ### Orders & Payments (2 models)
-15. **Order** - Заказы
-16. **Payment** - Платежи
+16. **Order** - Заказы
+17. **Payment** - Платежи
 
 ### Concessions (2 models)
-17. **ConcessionItem** - Товары кинобара
-18. **ConcessionPreorder** - Предзаказы кинобара
+18. **ConcessionItem** - Товары кинобара
+19. **ConcessionPreorder** - Предзаказы кинобара
 
 ### Reports (1 model)
-19. **Report** - Отчеты
+20. **Report** - Отчеты
 
-**TOTAL: 19 models**
+**TOTAL: 20 models**
 
 ---
 
@@ -50,6 +51,16 @@ Cinema (one) → (many) Hall
 Hall (one) → (many) Seat
   - Hall.seats → Seat.hall
   - CASCADE delete
+```
+
+### Film & Genres (Many-to-Many)
+```
+Film (many) ↔ (many) Genre
+  - Through association table: film_genres
+  - Film.genres → Genre.films
+  - CASCADE delete on both sides
+  - Each film can have multiple genres
+  - Each genre can belong to multiple films
 ```
 
 ### Film Distribution Chain
@@ -179,10 +190,13 @@ User (one) → (many) Report
 - `idx_ticket_session_seat` - UNIQUE(session_id, seat_id)
 - `idx_session_start_hall` - (start_datetime, hall_id)
 - `idx_cinema_city_status` - (city, status)
-- `idx_film_genre_year` - (genre, release_year)
+- `idx_film_genres_film` - (film_id) on film_genres table
+- `idx_film_genres_genre` - (genre_id) on film_genres table
 
 ### Search Indexes
 - `idx_film_title_search` - for film search
+- `idx_film_release_year` - for filtering films by year
+- `idx_genre_name` - UNIQUE for genre lookup
 - `idx_user_email_status` - for user lookup
 - `idx_order_number` - for order lookup
 - `idx_promocode_code` - for promocode validation

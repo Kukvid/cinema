@@ -3,11 +3,13 @@ from typing import List, Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.session import Session
 from app.models.film import Film
 from app.models.hall import Hall
+from app.models.cinema import Cinema
 from app.models.seat import Seat
 from app.models.ticket import Ticket
 from app.models.user import User
@@ -30,7 +32,9 @@ async def get_sessions(
     db: AsyncSession = Depends(get_db)
 ):
     """Get list of sessions with optional filters."""
-    query = select(Session)
+    query = select(Session).options(
+        selectinload(Session.hall).selectinload(Hall.cinema)
+    )
 
     if film_id:
         query = query.filter(Session.film_id == film_id)
@@ -54,8 +58,7 @@ async def get_sessions(
 
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
-    sessions = result.scalars().all()
-
+    sessions = result.scalars().unique().all()
     return sessions
 
 
@@ -65,7 +68,11 @@ async def get_session(
     db: AsyncSession = Depends(get_db)
 ):
     """Get session by ID."""
-    result = await db.execute(select(Session).filter(Session.id == session_id))
+    result = await db.execute(
+        select(Session)
+        .options(selectinload(Session.hall).selectinload(Hall.cinema))
+        .filter(Session.id == session_id)
+    )
     session = result.scalar_one_or_none()
 
     if not session:

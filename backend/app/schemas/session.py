@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from app.models.enums import SessionStatus
 from .seat import SeatWithStatus
+from .hall import HallResponse
+from .cinema import CinemaResponse
 
 
 # Base schema with common fields
@@ -36,6 +38,17 @@ class SessionUpdate(BaseModel):
     status: Optional[SessionStatus] = None
 
 
+# Nested schema for hall with cinema info
+class HallWithCinema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: Optional[str] = None
+    hall_number: str
+    available_seats_count: int
+    cinema: Optional[CinemaResponse] = None
+
+
 # Schema for session response
 class SessionResponse(SessionBase):
     model_config = ConfigDict(from_attributes=True)
@@ -44,6 +57,7 @@ class SessionResponse(SessionBase):
     film_id: int
     hall_id: int
     status: SessionStatus
+    hall: Optional[HallWithCinema] = None
 
 
 # Schema for session with available seats

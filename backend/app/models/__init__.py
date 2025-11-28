@@ -6,7 +6,8 @@ Base = declarative_base()
 from .cinema import Cinema
 from .hall import Hall
 from .seat import Seat
-from .film import Film
+from .film import Film, film_genres
+from .genre import Genre
 from .distributor import Distributor
 from .rental_contract import RentalContract
 from .payment_history import PaymentHistory
@@ -29,6 +30,8 @@ __all__ = [
     "Hall",
     "Seat",
     "Film",
+    "Genre",
+    "film_genres",
     "Distributor",
     "RentalContract",
     "PaymentHistory",

@@ -55,9 +55,21 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       console.error('Login failed:', error);
+
+      // Обработка ошибок валидации от FastAPI
+      let errorMessage = 'Login failed';
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        if (Array.isArray(detail)) {
+          errorMessage = detail.map((err) => err.msg || err.message).join(', ');
+        } else if (typeof detail === 'string') {
+          errorMessage = detail;
+        }
+      }
+
       return {
         success: false,
-        error: error.response?.data?.detail || 'Login failed',
+        error: errorMessage,
       };
     }
   };
@@ -69,9 +81,22 @@ export const AuthProvider = ({ children }) => {
       return await login(userData.email, userData.password);
     } catch (error) {
       console.error('Registration failed:', error);
+
+      // Обработка ошибок валидации от FastAPI
+      let errorMessage = 'Registration failed';
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        if (Array.isArray(detail)) {
+          // Если detail - массив ошибок валидации
+          errorMessage = detail.map((err) => err.msg || err.message).join(', ');
+        } else if (typeof detail === 'string') {
+          errorMessage = detail;
+        }
+      }
+
       return {
         success: false,
-        error: error.response?.data?.detail || 'Registration failed',
+        error: errorMessage,
       };
     }
   };
@@ -92,9 +117,21 @@ export const AuthProvider = ({ children }) => {
       return { success: true, user: updatedUser };
     } catch (error) {
       console.error('Update failed:', error);
+
+      // Обработка ошибок валидации от FastAPI
+      let errorMessage = 'Update failed';
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        if (Array.isArray(detail)) {
+          errorMessage = detail.map((err) => err.msg || err.message).join(', ');
+        } else if (typeof detail === 'string') {
+          errorMessage = detail;
+        }
+      }
+
       return {
         success: false,
-        error: error.response?.data?.detail || 'Update failed',
+        error: errorMessage,
       };
     }
   };

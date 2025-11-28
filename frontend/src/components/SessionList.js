@@ -45,7 +45,10 @@ const SessionList = ({ sessions, groupByDate = true }) => {
   // Группировка сеансов по датам
   const groupedSessions = groupByDate
     ? sessions.reduce((acc, session) => {
-        const date = session.start_time.split('T')[0];
+        if (!session.start_datetime) {
+          return acc;
+        }
+        const date = session.start_datetime.split('T')[0];
         if (!acc[date]) {
           acc[date] = [];
         }
@@ -96,7 +99,7 @@ const SessionList = ({ sessions, groupByDate = true }) => {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <TimeIcon sx={{ color: '#e50914' }} />
                           <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                            {formatTime(session.start_time)}
+                            {formatTime(session.start_datetime)}
                           </Typography>
                         </Box>
                       </Grid>
@@ -117,9 +120,8 @@ const SessionList = ({ sessions, groupByDate = true }) => {
                       {/* Цена */}
                       <Grid item xs={12} sm={2}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <PriceIcon sx={{ color: '#46d369', fontSize: 20 }} />
                           <Typography variant="h6" sx={{ fontWeight: 700, color: '#46d369' }}>
-                            {session.base_price} ₽
+                            {session.ticket_price} ₽
                           </Typography>
                         </Box>
                       </Grid>

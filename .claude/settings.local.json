@@ -6,7 +6,11 @@
       "Bash(tree:*)",
       "Bash(findstr:*)",
       "Bash(test:*)",
-      "Bash(python seed.py:*)"
+      "Bash(python seed.py:*)",
+      "Bash(alembic downgrade:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(npm run build:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

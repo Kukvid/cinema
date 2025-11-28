@@ -108,17 +108,21 @@ const FilmCard = ({ film }) => {
           {film.title}
         </Typography>
 
-        {film.genre && (
-          <Chip
-            label={film.genre}
-            size="small"
-            sx={{
-              mb: 1,
-              background: 'linear-gradient(135deg, rgba(229, 9, 20, 0.2) 0%, rgba(176, 7, 16, 0.2) 100%)',
-              border: '1px solid rgba(229, 9, 20, 0.3)',
-              fontWeight: 500,
-            }}
-          />
+        {film.genres && film.genres.length > 0 && (
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
+            {film.genres.slice(0, 3).map((genre) => (
+              <Chip
+                key={genre.id}
+                label={genre.name}
+                size="small"
+                sx={{
+                  background: 'linear-gradient(135deg, rgba(229, 9, 20, 0.2) 0%, rgba(176, 7, 16, 0.2) 100%)',
+                  border: '1px solid rgba(229, 9, 20, 0.3)',
+                  fontWeight: 500,
+                }}
+              />
+            ))}
+          </Box>
         )}
 
         {film.rating && (

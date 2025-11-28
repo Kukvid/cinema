@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Container,
   Grid,
@@ -9,61 +9,117 @@ import {
   Chip,
   Paper,
   Alert,
+  Button,
+  CircularProgress,
 } from '@mui/material';
-import { MovieFilter as MovieIcon } from '@mui/icons-material';
+import { MovieFilter as MovieIcon, Clear as ClearIcon } from '@mui/icons-material';
 import FilmCard from '../components/FilmCard';
 import Loading from '../components/Loading';
 import { filmsAPI } from '../api/films';
+import { getGenres } from '../api/genres';
 
 const Home = () => {
   const [films, setFilms] = useState([]);
-  const [filteredFilms, setFilteredFilms] = useState([]);
+  const [genres, setGenres] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [selectedGenre, setSelectedGenre] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+
+  const observer = useRef();
+  const lastFilmRef = useCallback(
+    (node) => {
+      if (loadingMore) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && hasMore) {
+          setPage((prevPage) => prevPage + 1);
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [loadingMore, hasMore]
+  );
 
   useEffect(() => {
-    loadFilms();
+    loadGenres();
   }, []);
 
   useEffect(() => {
-    filterFilms();
-  }, [films, selectedGenre, searchQuery]);
+    // Reset and load when filters change
+    setFilms([]);
+    setPage(0);
+    setHasMore(true);
+  }, [selectedGenre, searchQuery]);
+
+  useEffect(() => {
+    loadFilms();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, selectedGenre, searchQuery]);
+
+  const loadGenres = async () => {
+    try {
+      const genresData = await getGenres();
+      setGenres(genresData);
+    } catch (err) {
+      console.error('Failed to load genres:', err);
+    }
+  };
 
   const loadFilms = async () => {
     try {
-      setLoading(true);
-      const data = await filmsAPI.getFilms();
-      setFilms(data);
+      if (page === 0) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      const params = {
+        skip: page * 20,
+        limit: 20,
+      };
+
+      if (selectedGenre !== 'all') {
+        params.genre_id = parseInt(selectedGenre);
+      }
+
+      if (searchQuery) {
+        params.search = searchQuery;
+      }
+
+      const data = await filmsAPI.getFilms(params);
+
+      setTotal(data.total);
+      setHasMore(data.hasMore);
+
+      if (page === 0) {
+        setFilms(data.items);
+      } else {
+        setFilms((prevFilms) => [...prevFilms, ...data.items]);
+      }
+
       setError(null);
     } catch (err) {
       console.error('Failed to load films:', err);
-      setError('Не удалось загрузить фильмы');
+      setError('Не удалось загрузить данные');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
-  const filterFilms = () => {
-    let filtered = [...films];
-
-    if (selectedGenre !== 'all') {
-      filtered = filtered.filter((film) => film.genre === selectedGenre);
-    }
-
-    if (searchQuery) {
-      filtered = filtered.filter((film) =>
-        film.title.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    setFilteredFilms(filtered);
+  const resetFilters = () => {
+    setSelectedGenre('all');
+    setSearchQuery('');
   };
 
-  const genres = ['all', ...new Set(films.map((film) => film.genre).filter(Boolean))];
+  const hasActiveFilters = selectedGenre !== 'all' || searchQuery !== '';
 
-  if (loading) {
+  if (loading && page === 0) {
     return <Loading message="Загрузка фильмов..." />;
   }
 
@@ -128,7 +184,7 @@ const Home = () => {
           }}
         >
           <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={hasActiveFilters ? 5 : 6}>
               <TextField
                 fullWidth
                 label="Поиск фильмов"
@@ -138,7 +194,7 @@ const Home = () => {
                 placeholder="Введите название фильма..."
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={hasActiveFilters ? 5 : 6}>
               <TextField
                 fullWidth
                 select
@@ -147,36 +203,76 @@ const Home = () => {
                 onChange={(e) => setSelectedGenre(e.target.value)}
               >
                 <MenuItem value="all">Все жанры</MenuItem>
-                {genres
-                  .filter((g) => g !== 'all')
-                  .map((genre) => (
-                    <MenuItem key={genre} value={genre}>
-                      {genre}
-                    </MenuItem>
-                  ))}
+                {genres.map((genre) => (
+                  <MenuItem key={genre.id} value={genre.id.toString()}>
+                    {genre.name}
+                  </MenuItem>
+                ))}
               </TextField>
             </Grid>
+            {hasActiveFilters && (
+              <Grid item xs={12} md={2}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  onClick={resetFilters}
+                  startIcon={<ClearIcon />}
+                  sx={{
+                    borderColor: '#e50914',
+                    color: '#e50914',
+                    height: '56px',
+                    fontWeight: 600,
+                    '&:hover': {
+                      borderColor: '#ff1a1a',
+                      background: 'rgba(229, 9, 20, 0.1)',
+                    },
+                  }}
+                >
+                  Сбросить
+                </Button>
+              </Grid>
+            )}
           </Grid>
 
           {/* Быстрые фильтры по жанрам */}
           <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Chip
+              label="Все"
+              onClick={() => setSelectedGenre('all')}
+              variant={selectedGenre === 'all' ? 'filled' : 'outlined'}
+              sx={{
+                background:
+                  selectedGenre === 'all'
+                    ? 'linear-gradient(135deg, #e50914 0%, #b00710 100%)'
+                    : 'transparent',
+                borderColor: '#e50914',
+                color: selectedGenre === 'all' ? '#fff' : '#e50914',
+                fontWeight: 600,
+                '&:hover': {
+                  background:
+                    selectedGenre === 'all'
+                      ? 'linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)'
+                      : 'rgba(229, 9, 20, 0.1)',
+                },
+              }}
+            />
             {genres.map((genre) => (
               <Chip
-                key={genre}
-                label={genre === 'all' ? 'Все' : genre}
-                onClick={() => setSelectedGenre(genre)}
-                variant={selectedGenre === genre ? 'filled' : 'outlined'}
+                key={genre.id}
+                label={genre.name}
+                onClick={() => setSelectedGenre(genre.id.toString())}
+                variant={selectedGenre === genre.id.toString() ? 'filled' : 'outlined'}
                 sx={{
                   background:
-                    selectedGenre === genre
+                    selectedGenre === genre.id.toString()
                       ? 'linear-gradient(135deg, #e50914 0%, #b00710 100%)'
                       : 'transparent',
                   borderColor: '#e50914',
-                  color: selectedGenre === genre ? '#fff' : '#e50914',
+                  color: selectedGenre === genre.id.toString() ? '#fff' : '#e50914',
                   fontWeight: 600,
                   '&:hover': {
                     background:
-                      selectedGenre === genre
+                      selectedGenre === genre.id.toString()
                         ? 'linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)'
                         : 'rgba(229, 9, 20, 0.1)',
                   },
@@ -189,21 +285,52 @@ const Home = () => {
         {/* Список фильмов */}
         <Box sx={{ mb: 3 }}>
           <Typography variant="h5" sx={{ fontWeight: 600, mb: 1 }}>
-            {selectedGenre === 'all' ? 'Все фильмы' : `Фильмы в жанре "${selectedGenre}"`}
+            {selectedGenre === 'all'
+              ? 'Все фильмы'
+              : `Фильмы в жанре "${genres.find((g) => g.id.toString() === selectedGenre)?.name || ''}"`}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Найдено фильмов: {filteredFilms.length}
+            Найдено фильмов: {total}
           </Typography>
         </Box>
 
-        {filteredFilms.length > 0 ? (
-          <Grid container spacing={3}>
-            {filteredFilms.map((film) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={film.id}>
-                <FilmCard film={film} />
-              </Grid>
-            ))}
-          </Grid>
+        {films.length > 0 ? (
+          <>
+            <Grid container spacing={3}>
+              {films.map((film, index) => {
+                // Attach ref to the last film
+                if (films.length === index + 1) {
+                  return (
+                    <Grid item xs={12} sm={6} md={4} lg={3} key={film.id} ref={lastFilmRef}>
+                      <FilmCard film={film} />
+                    </Grid>
+                  );
+                } else {
+                  return (
+                    <Grid item xs={12} sm={6} md={4} lg={3} key={film.id}>
+                      <FilmCard film={film} />
+                    </Grid>
+                  );
+                }
+              })}
+            </Grid>
+
+            {/* Loading indicator for infinite scroll */}
+            {loadingMore && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <CircularProgress sx={{ color: '#e50914' }} />
+              </Box>
+            )}
+
+            {/* End of list message */}
+            {!hasMore && films.length > 0 && (
+              <Box sx={{ textAlign: 'center', mt: 4 }}>
+                <Typography variant="body1" color="text.secondary">
+                  Все фильмы загружены
+                </Typography>
+              </Box>
+            )}
+          </>
         ) : (
           <Paper
             sx={{

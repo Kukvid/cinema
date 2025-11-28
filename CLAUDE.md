@@ -6,6 +6,7 @@ Always use context7 when I need code generation, setup or configuration steps, o
 library/API documentation. This means you should automatically use the Context7 MCP
 tools to resolve library id and get library docs without me having to explicitly ask.
 Поддерживай красивую и понятную структуру проектов фронтэнда и бэкэнда
+Используй агентов из папки agents для выполнения всех задач, применяй их там где того требует задача
 ## Project Overview
 
 Система управления сетью кинотеатров. Full-stack приложение с FastAPI backend и Next.js frontend.
