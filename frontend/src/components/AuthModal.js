@@ -20,8 +20,10 @@ const AuthModal = ({ open, onClose, onAuthSuccess }) => {
     };
 
     const handleAuthSuccess = () => {
+        // Не закрываем модальное окно сразу, а сначала выполняем onAuthSuccess
+        // Это позволяет передать контекст до закрытия окна
         onAuthSuccess();
-        onClose();
+        // onClose(); // Закрываем окно уже внутри onAuthSuccess в SessionBooking
     };
 
     return (
@@ -51,7 +53,7 @@ const AuthModal = ({ open, onClose, onAuthSuccess }) => {
                         <CloseIcon />
                     </IconButton>
                 </Box>
-                
+
                 {activeTab === 0 ? (
                     <LoginForm onLoginSuccess={handleAuthSuccess} />
                 ) : (

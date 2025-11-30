@@ -63,11 +63,35 @@ const SessionBooking = () => {
         severity: "info",
     });
     const [authModalOpen, setAuthModalOpen] = useState(false);
-    const [pendingAction, setPendingAction] = useState(null);
 
     useEffect(() => {
         loadData();
-    }, [id]);
+
+        // Проверяем, есть ли сохраненные данные для бронирования
+        const savedBookingData = localStorage.getItem('pendingBooking');
+        const returnUrl = localStorage.getItem('bookingReturnUrl');
+
+        if (savedBookingData && returnUrl && isAuthenticated && returnUrl === `/sessions/${id}/booking`) {
+            // Если данные сохранены, пользователь аутентифицирован и мы на нужной странице
+            const bookingData = JSON.parse(savedBookingData);
+
+            // Восстанавливаем состояние
+            setSelectedSeats(bookingData.selectedSeats || []);
+            setSelectedConcessions(bookingData.selectedConcessions || {});
+            setAppliedPromo(bookingData.appliedPromo || null);
+            setUseBonuses(bookingData.useBonuses || false);
+            setBonusAmount(bookingData.bonusAmount || 0);
+
+            // Очищаем сохраненные данные
+            localStorage.removeItem('pendingBooking');
+            localStorage.removeItem('bookingReturnUrl');
+
+            // Продолжаем процесс бронирования
+            setTimeout(() => {
+                handleBooking();
+            }, 0);
+        }
+    }, [id, isAuthenticated]);
 
     const loadData = async () => {
         try {
@@ -198,11 +222,21 @@ const SessionBooking = () => {
 
     const handleBooking = async () => {
         if (!isAuthenticated) {
-            // Сохраняем намерение выполнить бронирование после авторизации
-            setPendingAction('booking');
+            // Сохраняем текущие данные заказа в localStorage перед открытием модального окна
+            const bookingDataToSave = {
+                selectedSeats,
+                selectedConcessions,
+                appliedPromo,
+                useBonuses,
+                bonusAmount,
+            };
+            localStorage.setItem('pendingBooking', JSON.stringify(bookingDataToSave));
+            localStorage.setItem('bookingReturnUrl', `/sessions/${id}/booking`);
+
             setAuthModalOpen(true);
             return;
         }
+
         if (selectedSeats.length === 0) {
             setError("Выберите хотя бы одно место");
             return;
@@ -902,18 +936,15 @@ const SessionBooking = () => {
                 open={authModalOpen}
                 onClose={() => {
                     setAuthModalOpen(false);
-                    setPendingAction(null); // Сбрасываем действие при закрытии
                 }}
                 onAuthSuccess={() => {
-                    // После успешной авторизации выполняем сохраненное действие
-                    if (pendingAction === 'booking') {
-                        setAuthModalOpen(false); // Сначала закрываем модальное окно
-                        setPendingAction(null); // Сбрасываем действие
-                        setTimeout(() => {
-                            // Отложенное выполнение, чтобы дать время обновлению состояния
-                            handleBooking(); // Повторно вызываем, теперь пользователь авторизован
-                        }, 0);
-                    }
+                    // После успешной авторизации сбрасываем модальное окно
+                    setAuthModalOpen(false);
+
+                    // Повторно вызываем handleBooking через таймаут, чтобы дать время обновлению состояния аутентификации
+                    setTimeout(() => {
+                        handleBooking();
+                    }, 100); // Даем немного времени для обновления состояния аутентификации
                 }}
             />
         </Container>
