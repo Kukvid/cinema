@@ -32,8 +32,6 @@ class TicketResponse(TicketBase):
     seller_id: Optional[int] = None
     purchase_date: datetime
     status: TicketStatus
-    qr_code: Optional[str] = None
-    validation_date: Optional[datetime] = None
 
 
 # Schema for QR code validation
@@ -41,4 +39,4 @@ class TicketValidation(BaseModel):
     qr_code: str
     is_valid: bool
     message: str
-    ticket_id: Optional[int] = None
+    order_id: Optional[int] = None

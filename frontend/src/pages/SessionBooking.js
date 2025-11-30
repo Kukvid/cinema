@@ -38,6 +38,7 @@ import { concessionsAPI } from "../api/concessions";
 import { bookingsAPI } from "../api/bookings";
 import { useAuth } from "../context/AuthContext";
 import PromoCodeInput from "../components/PromoCodeInput";
+import AuthModal from "../components/AuthModal";
 
 const SessionBooking = () => {
     const { id } = useParams();
@@ -61,6 +62,8 @@ const SessionBooking = () => {
         message: "",
         severity: "info",
     });
+    const [authModalOpen, setAuthModalOpen] = useState(false);
+    const [pendingAction, setPendingAction] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -151,34 +154,53 @@ const SessionBooking = () => {
     };
 
     const calculateTotal = () => {
-        const ticketsTotal =
-            selectedSeats.length * (session?.ticket_price || 0);
-        const concessionsTotal = Object.entries(selectedConcessions).reduce(
-            (sum, [itemId, quantity]) => {
-                const item = concessions.find((c) => c.id === parseInt(itemId));
-                return sum + (parseFloat(item?.price) || 0) * quantity;
-            },
-            0
-        );
+        const ticketsTotal = selectedSeats && session
+            ? selectedSeats.length * (session.ticket_price || 0)
+            : 0;
 
-        let total = ticketsTotal + concessionsTotal;
+        const concessionsTotal = selectedConcessions
+            ? Object.entries(selectedConcessions).reduce(
+                (sum, [itemId, quantity]) => {
+                    const item = concessions.find((c) => c && c.id === parseInt(itemId));
+                    return sum + (item?.price || 0) * quantity;
+                },
+                0
+            )
+            : 0;
+
+        const subtotal = ticketsTotal + concessionsTotal;
 
         // Применяем промокод
+        let discountAmount = 0;
         if (appliedPromo) {
-           total = Math.max(1, total - appliedPromo.discount_amount);
+            discountAmount = parseFloat(appliedPromo.discount_amount) || 0;
         }
+
+        const totalAfterDiscount = Math.max(0, subtotal - discountAmount);
 
         // Вычитаем бонусы
+        let bonusDeduction = 0;
         if (useBonuses && bonusAmount > 0) {
-            total = Math.max(0, total - bonusAmount);
+            bonusDeduction = Math.min(parseFloat(bonusAmount) || 0, totalAfterDiscount);
         }
 
-        return { ticketsTotal, concessionsTotal, total };
+        const finalTotal = Math.max(0, totalAfterDiscount - bonusDeduction);
+
+        return {
+            ticketsTotal,
+            concessionsTotal,
+            subtotal,  // Промежуточная сумма до скидок
+            discountAmount,
+            bonusDeduction,
+            total: finalTotal  // Финальная сумма после всех скидок и бонусов
+        };
     };
 
     const handleBooking = async () => {
         if (!isAuthenticated) {
-            navigate("/login");
+            // Сохраняем намерение выполнить бронирование после авторизации
+            setPendingAction('booking');
+            setAuthModalOpen(true);
             return;
         }
         if (selectedSeats.length === 0) {
@@ -190,27 +212,63 @@ const SessionBooking = () => {
             setBookingLoading(true);
             setError(null);
 
-            const bookingData = {
+            // Создаем билеты из выбранных мест
+            const tickets = selectedSeats.map(seat_id => ({
                 session_id: parseInt(id),
-                seat_ids: selectedSeats,
-                concession_items: Object.entries(selectedConcessions).map(
-                    ([id, quantity]) => ({
-                        concession_id: parseInt(id),
-                        quantity,
-                    })
-                ),
-                promo_code: appliedPromo?.code || undefined,
-                use_bonuses: useBonuses,
-                bonus_amount: useBonuses ? bonusAmount : 0,
+                seat_id: parseInt(seat_id),
+                price: session?.ticket_price || 0,  // используем цену сеанса
+                sales_channel: "online"
+            }));
+
+            // Рассчитываем общую сумму заказа (билеты + кинобар)
+            const ticketsTotal = selectedSeats.length * (session?.ticket_price || 0);
+            const concessionsTotal = Object.entries(selectedConcessions).reduce(
+                (sum, [itemId, quantity]) => {
+                    const item = concessions.find((c) => c && c.id === parseInt(itemId));
+                    return sum + (item?.price || 0) * quantity;
+                },
+                0
+            );
+            const totalOrderAmount = parseFloat((ticketsTotal + concessionsTotal).toFixed(2));
+
+            const bookingData = {
+                tickets: tickets,
+                total_order_amount: totalOrderAmount,  // передаем общую сумму заказа
+                promocode_code: appliedPromo?.code || undefined,
+                use_bonus_points: useBonuses ? parseFloat(bonusAmount || 0) : undefined,  // поле из схемы OrderCreate
             };
 
             const booking = await bookingsAPI.createBooking(bookingData);
-            await bookingsAPI.createPayment(booking.id, {
-                amount: calculateTotal().total,
-                payment_method: "card",
-            });
 
-            navigate("/my-tickets");
+            // Если есть выбранные concession items, создаем предзаказы
+            if (Object.keys(selectedConcessions).length > 0) {
+                try {
+                    // Подготавливаем список всех предзаказов для отправки за один раз
+                    const preordersList = [];
+                    for (const [concessionId, quantity] of Object.entries(selectedConcessions)) {
+                        const concessionItem = concessions.find(item => item.id === parseInt(concessionId));
+                        if (concessionItem && quantity > 0) {
+                            preordersList.push({
+                                order_id: booking.id,
+                                concession_item_id: parseInt(concessionId),
+                                quantity: quantity,
+                                unit_price: concessionItem.price,
+                            });
+                        }
+                    }
+
+                    // Создаем все предзаказы за один вызов, чтобы у них был одинаковый код получения
+                    if (preordersList.length > 0) {
+                        await concessionsAPI.createPreorderBatch(preordersList);
+                    }
+                } catch (preorderError) {
+                    console.error('Failed to create preorders:', preorderError);
+                    // Не прерываем основной заказ, если не удалось создать предзаказы на концессию
+                }
+            }
+
+            // Вместо автоматической оплаты, перенаправляем на страницу оплаты
+            navigate(`/payment/${booking.id}`);
         } catch (err) {
             console.error("Booking failed:", err);
             setError(
@@ -243,14 +301,15 @@ const SessionBooking = () => {
         );
     }
 
-    const { ticketsTotal, concessionsTotal, total } = calculateTotal();
+    const calculatedValues = calculateTotal();
+    const { ticketsTotal, concessionsTotal, subtotal, discountAmount, bonusDeduction, total } = calculatedValues;
     const categories = [
         ...new Set(
-            concessions.map((item) => item.category?.name).filter(Boolean)
+            concessions.map((item) => item?.category?.name).filter(Boolean)
         ),
     ];
     const filteredConcessions = concessions.filter(
-        (item) => item.category?.name === activeCategory
+        (item) => item?.category?.name === activeCategory
     );
 
     return (
@@ -667,7 +726,7 @@ const SessionBooking = () => {
                                     Билеты ({selectedSeats.length})
                                 </Typography>
                                 <Typography sx={{ fontWeight: 600 }}>
-                                    {ticketsTotal} ₽
+                                    {ticketsTotal.toFixed(2)} ₽
                                 </Typography>
                             </Box>
                             {concessionsTotal > 0 && (
@@ -680,7 +739,7 @@ const SessionBooking = () => {
                                 >
                                     <Typography>Кинобар</Typography>
                                     <Typography sx={{ fontWeight: 600 }}>
-                                        {concessionsTotal} ₽
+                                        {concessionsTotal.toFixed(2)} ₽
                                     </Typography>
                                 </Box>
                             )}
@@ -690,9 +749,52 @@ const SessionBooking = () => {
                             sx={{ my: 2, borderColor: "rgba(229, 9, 20, 0.2)" }}
                         />
 
+                        <Box sx={{ mb: 2 }}>
+                            <Box
+                                sx={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    mb: 1,
+                                }}
+                            >
+                                <Typography>Промежуточный итог</Typography>
+                                <Typography sx={{ fontWeight: 600 }}>
+                                    {subtotal.toFixed(2)} ₽
+                                </Typography>
+                            </Box>
+                            {discountAmount > 0 && (
+                                <Box
+                                    sx={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        mb: 1,
+                                    }}
+                                >
+                                    <Typography>Скидка по промокоду</Typography>
+                                    <Typography sx={{ fontWeight: 600, color: "#46d369" }}>
+                                        -{discountAmount.toFixed(2)} ₽
+                                    </Typography>
+                                </Box>
+                            )}
+                            {bonusDeduction > 0 && (
+                                <Box
+                                    sx={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        mb: 1,
+                                    }}
+                                >
+                                    <Typography>Списание бонусов</Typography>
+                                    <Typography sx={{ fontWeight: 600, color: "#46d369" }}>
+                                        -{bonusDeduction.toFixed(2)} ₽
+                                    </Typography>
+                                </Box>
+                            )}
+                        </Box>
+
                         <PromoCodeInput
                             onApply={handleApplyPromo}
-                            currentTotal={ticketsTotal + concessionsTotal}
+                            currentTotal={subtotal} // Передаем промежуточную сумму до скидок
                             disabled={selectedSeats.length === 0}
                         />
 
@@ -707,7 +809,7 @@ const SessionBooking = () => {
                                             }
                                         />
                                     }
-                                    label={`Использовать бонусы (доступно: ${user.bonus_balance})`}
+                                    label={`Использовать бонусы (доступно: ${user.bonus_balance.toFixed(2)})`}
                                 />
                                 {useBonuses && (
                                     <TextField
@@ -719,10 +821,9 @@ const SessionBooking = () => {
                                         onChange={(e) =>
                                             setBonusAmount(
                                                 Math.min(
-                                                    parseInt(e.target.value) ||
-                                                        0,
+                                                    parseFloat(e.target.value) || 0,
                                                     user.bonus_balance,
-                                                    total
+                                                    subtotal // Максимум до применения промокода
                                                 )
                                             )
                                         }
@@ -730,7 +831,7 @@ const SessionBooking = () => {
                                             min: 0,
                                             max: Math.min(
                                                 user.bonus_balance,
-                                                total
+                                                subtotal // Максимум до применения промокода
                                             ),
                                         }}
                                         sx={{ mt: 1 }}
@@ -755,7 +856,7 @@ const SessionBooking = () => {
                                     variant="h6"
                                     sx={{ fontWeight: 700 }}
                                 >
-                                    Итого
+                                    Итого к оплате
                                 </Typography>
                                 <Typography
                                     variant="h4"
@@ -795,6 +896,26 @@ const SessionBooking = () => {
                     </Button>
                 </Grid>
             </Grid>
+
+            {/* Компонент модального окна авторизации */}
+            <AuthModal
+                open={authModalOpen}
+                onClose={() => {
+                    setAuthModalOpen(false);
+                    setPendingAction(null); // Сбрасываем действие при закрытии
+                }}
+                onAuthSuccess={() => {
+                    // После успешной авторизации выполняем сохраненное действие
+                    if (pendingAction === 'booking') {
+                        setAuthModalOpen(false); // Сначала закрываем модальное окно
+                        setPendingAction(null); // Сбрасываем действие
+                        setTimeout(() => {
+                            // Отложенное выполнение, чтобы дать время обновлению состояния
+                            handleBooking(); // Повторно вызываем, теперь пользователь авторизован
+                        }, 0);
+                    }
+                }}
+            />
         </Container>
     );
 };

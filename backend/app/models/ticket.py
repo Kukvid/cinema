@@ -18,8 +18,6 @@ class Ticket(Base):
     purchase_date = Column(DateTime, nullable=False)
     sales_channel = Column(SQLEnum(SalesChannel), nullable=False)
     status = Column(SQLEnum(TicketStatus), default=TicketStatus.RESERVED, nullable=False)
-    qr_code = Column(String(2000))
-    validation_date = Column(DateTime)
 
     # Relationships
     session = relationship("Session", back_populates="tickets")
@@ -36,6 +34,5 @@ class Ticket(Base):
         Index("idx_ticket_buyer", "buyer_id"),
         Index("idx_ticket_order", "order_id"),
         Index("idx_ticket_session_seat", "session_id", "seat_id", unique=True),
-        Index("idx_ticket_qr_code", "qr_code"),
         CheckConstraint("price >= 0", name="check_ticket_price_non_negative"),
     )

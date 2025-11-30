@@ -28,8 +28,15 @@ const PromoCodeInput = ({ onApply, disabled = false, currentTotal = 0 }) => {
 
             const promoData = await validatePromocode(promoCode, currentTotal);
 
-            setAppliedPromo(promoData);
-            onApply(promoData);
+            // Проверяем, действителен ли промокод
+            if (promoData.is_valid) {
+                setAppliedPromo(promoData);
+                onApply(promoData); // Передаем только действительный промокод
+            } else {
+                setError(promoData.message || "Промокод недействителен");
+                setAppliedPromo(null);
+                onApply(null);
+            }
         } catch (err) {
             console.error("Promo validation error:", err);
 
@@ -58,14 +65,9 @@ const PromoCodeInput = ({ onApply, disabled = false, currentTotal = 0 }) => {
     };
 
     const formatDiscount = (promo) => {
-        if (!promo) return "";
+        if (!promo || !promo.is_valid) return "";
 
-        if (promo.is_valid) {
-            return `${promo.discount_amount}₽`;
-        }
-        else{
-          return '';
-        }
+        return `${promo.discount_amount}₽`;
     };
 
     return (
@@ -153,14 +155,14 @@ const PromoCodeInput = ({ onApply, disabled = false, currentTotal = 0 }) => {
                 </Alert>
             )}
 
-            {appliedPromo && (
+            {/* {appliedPromo && appliedPromo.is_valid && (
                 <Alert
                     severity="success"
                     sx={{ mt: 1 }}
                 >
                     Промокод применён! Скидка: {formatDiscount(appliedPromo)}
                 </Alert>
-            )}
+            )} */}
         </Box>
     );
 };

@@ -105,7 +105,7 @@ const Home = () => {
       setError(null);
     } catch (err) {
       console.error('Failed to load films:', err);
-      setError('Не удалось загрузить данные');
+      // setError('Не удалось загрузить данные');
     } finally {
       setLoading(false);
       setLoadingMore(false);

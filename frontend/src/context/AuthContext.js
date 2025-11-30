@@ -61,9 +61,16 @@ export const AuthProvider = ({ children }) => {
       if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
         if (Array.isArray(detail)) {
-          errorMessage = detail.map((err) => err.msg || err.message).join(', ');
+          // Если detail - массив объектов ошибок FastAPI
+          errorMessage = detail.map((err) => {
+            // Пробуем получить сообщение об ошибке из разных возможных полей
+            return err.msg || err.message || err.detail || JSON.stringify(err);
+          }).join(', ');
         } else if (typeof detail === 'string') {
           errorMessage = detail;
+        } else if (typeof detail === 'object' && detail !== null) {
+          // Если detail - объект (а не массив), но не строка
+          errorMessage = detail.msg || detail.message || detail.detail || JSON.stringify(detail);
         }
       }
 
@@ -87,10 +94,16 @@ export const AuthProvider = ({ children }) => {
       if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
         if (Array.isArray(detail)) {
-          // Если detail - массив ошибок валидации
-          errorMessage = detail.map((err) => err.msg || err.message).join(', ');
+          // Если detail - массив объектов ошибок FastAPI
+          errorMessage = detail.map((err) => {
+            // Пробуем получить сообщение об ошибке из разных возможных полей
+            return err.msg || err.message || err.detail || JSON.stringify(err);
+          }).join(', ');
         } else if (typeof detail === 'string') {
           errorMessage = detail;
+        } else if (typeof detail === 'object' && detail !== null) {
+          // Если detail - объект (а не массив), но не строка
+          errorMessage = detail.msg || detail.message || detail.detail || JSON.stringify(detail);
         }
       }
 
@@ -123,9 +136,16 @@ export const AuthProvider = ({ children }) => {
       if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
         if (Array.isArray(detail)) {
-          errorMessage = detail.map((err) => err.msg || err.message).join(', ');
+          // Если detail - массив объектов ошибок FastAPI
+          errorMessage = detail.map((err) => {
+            // Пробуем получить сообщение об ошибке из разных возможных полей
+            return err.msg || err.message || err.detail || JSON.stringify(err);
+          }).join(', ');
         } else if (typeof detail === 'string') {
           errorMessage = detail;
+        } else if (typeof detail === 'object' && detail !== null) {
+          // Если detail - объект (а не массив), но не строка
+          errorMessage = detail.msg || detail.message || detail.detail || JSON.stringify(detail);
         }
       }
 

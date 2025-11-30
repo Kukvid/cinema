@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # Reservation
     SEAT_RESERVATION_TIMEOUT_MINUTES: int = 5
 
+    # Payment
+    ORDER_PAYMENT_TIMEOUT_MINUTES: int = 5
+
     # QR Code
     QR_CODE_SIZE: int = 10
     QR_CODE_BORDER: int = 4

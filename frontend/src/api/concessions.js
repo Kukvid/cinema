@@ -25,4 +25,14 @@ export const concessionsAPI = {
         const response = await axios.delete(`/concessions/${id}`);
         return response.data;
     },
+
+    createPreorder: async (preorderData) => {
+        const response = await axios.post("/concessions/preorder", preorderData);
+        return response.data;
+    },
+
+    createPreorderBatch: async (preorderDataList) => {
+        const response = await axios.post("/concessions/preorder-batch", preorderDataList);
+        return response.data;
+    },
 };

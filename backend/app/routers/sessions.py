@@ -65,7 +65,8 @@ async def get_sessions(
 ):
     """Get list of sessions with optional filters."""
     query = select(Session).options(
-        selectinload(Session.hall).selectinload(Hall.cinema)
+        selectinload(Session.hall).selectinload(Hall.cinema),
+        selectinload(Session.film)
     )
 
     if film_id:
@@ -100,6 +101,7 @@ async def get_sessions(
     for session in sessions:
         session_dict = SessionResponse.model_validate(session).model_dump()
         session_dict['available_seats'] = available_seats_map.get(session.id, 0)
+        session_dict['film_title'] = session.film.title
         response_sessions.append(SessionResponse(**session_dict))
 
     return response_sessions

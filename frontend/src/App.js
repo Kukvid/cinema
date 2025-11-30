@@ -19,6 +19,7 @@ import Register from './pages/Register';
 // User Pages
 import Profile from './pages/Profile';
 import MyTickets from './pages/MyTickets';
+import PaymentPage from './pages/PaymentPage';
 
 // Admin Pages
 import Dashboard from './pages/admin/Dashboard';
@@ -63,6 +64,15 @@ function App() {
                 element={
                   <PrivateRoute>
                     <MyTickets />
+                  </PrivateRoute>
+                }
+              />
+
+              <Route
+                path="/payment/:id"
+                element={
+                  <PrivateRoute>
+                    <PaymentPage />
                   </PrivateRoute>
                 }
               />

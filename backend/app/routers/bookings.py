@@ -106,8 +106,8 @@ async def create_booking(
         validation_result = await validate_promocode(
             db=db,
             code=booking_data.promocode_code,
-            order_amount=total_amount,
-            category="TICKETS"  # Bookings are always for tickets
+            order_amount=booking_data.total_order_amount,  # Use total order amount instead of just tickets
+            category="ORDER"  # The promocode applies to the entire order (tickets + concessions)
         )
 
         if not validation_result.is_valid:
@@ -250,7 +250,7 @@ async def process_payment(
         amount=order.final_amount,
         payment_method=PaymentMethod(payment_data.payment_method),
         transaction_id=transaction_id,
-        payment_status=PaymentStatus.PAID,
+        status=PaymentStatus.PAID,
         card_last_digits=payment_data.card_number[-4:] if payment_data.card_number else None
     )
     db.add(new_payment)
@@ -295,7 +295,7 @@ async def process_payment(
     return PaymentResponse(
         id=new_payment.id,
         order_id=new_payment.order_id,
-        payment_status=new_payment.payment_status.value,
+        status=new_payment.status.value,
         payment_method=new_payment.payment_method.value,
         transaction_id=new_payment.transaction_id,
         message="Payment processed successfully"

@@ -317,7 +317,7 @@
 - `rental_contract_id` - Внешний ключ на RentalContract
 - `calculated_amount` - Рассчитанная сумма
 - `calculation_date` - Дата расчета
-- `payment_status` - Статус платежа (enum: PENDING, PAID, FAILED, REFUNDED)
+- `status` - Статус платежа (enum: PENDING, PAID, FAILED, REFUNDED)
 - `payment_date` - Дата платежа
 - `payment_document_number` - Номер платежного документа
 - `created_at`, `updated_at` - Временные метки

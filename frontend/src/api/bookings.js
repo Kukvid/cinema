@@ -16,18 +16,10 @@ export const bookingsAPI = {
     return response.data;
   },
 
-  createPayment: async (bookingId, paymentData) => {
-    const response = await axios.post(`/bookings/${bookingId}/payment`, paymentData);
-    return response.data;
-  },
 
   cancelBooking: async (id) => {
     const response = await axios.delete(`/bookings/${id}`);
     return response.data;
   },
 
-  getMyTickets: async () => {
-    const response = await axios.get('/tickets/my');
-    return response.data;
-  },
 };

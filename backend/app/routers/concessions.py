@@ -192,17 +192,28 @@ async def create_preorder(
         )
 
     # Calculate total price
-    total_price = preorder_data.item_price * preorder_data.quantity
+    total_price = preorder_data.unit_price * preorder_data.quantity
 
     # Generate pickup code
-    pickup_code = f"PKP-{secrets.token_hex(3).upper()}"
+    # Check if there are already preorders for this order - use the same code if exists
+    existing_preorder_result = await db.execute(
+        select(ConcessionPreorder).filter(ConcessionPreorder.order_id == preorder_data.order_id)
+    )
+    existing_preorder = existing_preorder_result.first()
+
+    if existing_preorder:
+        # Use the same pickup code as other preorders in the same order
+        pickup_code = existing_preorder[0].pickup_code
+    else:
+        # Generate new pickup code for this order
+        pickup_code = f"PKP-{secrets.token_hex(3).upper()}"
 
     # Create preorder
     new_preorder = ConcessionPreorder(
         order_id=preorder_data.order_id,
         concession_item_id=preorder_data.concession_item_id,
         quantity=preorder_data.quantity,
-        item_price=preorder_data.item_price,
+        unit_price=preorder_data.unit_price,
         total_price=total_price,
         pickup_code=pickup_code,
         status=PreorderStatus.PENDING
@@ -220,8 +231,116 @@ async def create_preorder(
         order_id=new_preorder.order_id,
         concession_item_id=new_preorder.concession_item_id,
         quantity=new_preorder.quantity,
-        item_price=new_preorder.item_price,
+        unit_price=new_preorder.unit_price,
         total_price=new_preorder.total_price,
         pickup_code=new_preorder.pickup_code,
         status=new_preorder.status.value
+    )
+
+
+@router.post("/preorder-batch", status_code=status.HTTP_201_CREATED)
+async def create_preorder_batch(
+    preorders_data: List[ConcessionPreorderCreate],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Create multiple concession preorders for the same order with shared pickup code."""
+    if not preorders_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one preorder item is required"
+        )
+
+    # Verify all items belong to the same order and user
+    order_id = preorders_data[0].order_id
+    result = await db.execute(select(Order).filter(Order.id == order_id))
+    order = result.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Order with id {order_id} not found"
+        )
+
+    if order.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only create preorders for your own orders"
+        )
+
+    # Check all items before creating any preorders
+    items_and_quantities = []
+    for preorder_data in preorders_data:
+        if preorder_data.order_id != order_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="All preorders must belong to the same order"
+            )
+
+        result = await db.execute(
+            select(ConcessionItem).filter(ConcessionItem.id == preorder_data.concession_item_id)
+        )
+        item = result.scalar_one_or_none()
+
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Concession item with id {preorder_data.concession_item_id} not found"
+            )
+
+        if item.status != ConcessionItemStatus.AVAILABLE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Concession item {preorder_data.concession_item_id} is not available"
+            )
+
+        if item.stock_quantity < preorder_data.quantity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Insufficient stock for item {preorder_data.concession_item_id}. Available: {item.stock_quantity}"
+            )
+
+        items_and_quantities.append((item, preorder_data))
+
+    # Generate a single pickup code for all items in this order
+    pickup_code = f"PKP-{secrets.token_hex(3).upper()}"
+
+    # Now create all preorders with the same pickup code
+    created_preorders = []
+    for item, preorder_data in items_and_quantities:
+        total_price = preorder_data.unit_price * preorder_data.quantity
+
+        new_preorder = ConcessionPreorder(
+            order_id=preorder_data.order_id,
+            concession_item_id=preorder_data.concession_item_id,
+            quantity=preorder_data.quantity,
+            unit_price=preorder_data.unit_price,
+            total_price=total_price,
+            pickup_code=pickup_code,
+            status=PreorderStatus.PENDING
+        )
+
+        # Update stock
+        item.stock_quantity -= preorder_data.quantity
+
+        db.add(new_preorder)
+        created_preorders.append(new_preorder)
+
+    await db.commit()
+
+    # Refresh all created preorders
+    for preorder in created_preorders:
+        await db.refresh(preorder)
+
+    # Return the first preorder response (they all have the same pickup code)
+    first_preorder = created_preorders[0]
+    return ConcessionPreorderResponse(
+        id=first_preorder.id,
+        order_id=first_preorder.order_id,
+        concession_item_id=first_preorder.concession_item_id,
+        quantity=first_preorder.quantity,
+        unit_price=first_preorder.unit_price,
+        total_price=first_preorder.total_price,
+        pickup_code=first_preorder.pickup_code,
+        status=first_preorder.status.value
     )

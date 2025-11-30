@@ -53,7 +53,7 @@ class ConcessionPreorderCreate(BaseModel):
     order_id: int = Field(..., gt=0)
     concession_item_id: int = Field(..., gt=0)
     quantity: int = Field(..., gt=0, description="Quantity must be positive")
-    item_price: Decimal = Field(..., ge=0)
+    unit_price: Decimal = Field(..., ge=0)
 
 
 # Schema for concession preorder response
@@ -64,7 +64,7 @@ class ConcessionPreorderResponse(BaseModel):
     order_id: int
     concession_item_id: int
     quantity: int
-    item_price: Decimal
+    unit_price: Decimal
     total_price: Decimal
     pickup_code: Optional[str] = None
     status: str

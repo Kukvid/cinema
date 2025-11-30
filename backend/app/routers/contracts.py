@@ -245,7 +245,7 @@ async def get_contract_payments(
             "distributor_amount": float(payment.distributor_amount),
             "cinema_amount": float(payment.cinema_amount),
             "payment_date": payment.payment_date,
-            "payment_status": payment.payment_status.value if payment.payment_status else None
+            "status": payment.status.value if payment.status else None
         }
         for payment in payments
     ]
