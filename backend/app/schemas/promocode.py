@@ -48,7 +48,14 @@ class PromocodeResponse(PromocodeBase):
     status: PromocodeStatus
 
 
-# Schema for promocode validation
+# Schema for promocode validation request
+class PromocodeValidateRequest(BaseModel):
+    code: str = Field(..., min_length=1, max_length=50)
+    order_amount: Decimal = Field(..., gt=0)
+    category: Optional[str] = Field(None, max_length=100)
+
+
+# Schema for promocode validation response
 class PromocodeValidation(BaseModel):
     code: str
     order_amount: Decimal

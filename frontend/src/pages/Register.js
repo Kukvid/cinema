@@ -27,13 +27,13 @@ import { useForm } from 'react-hook-form';
 
 const Register = () => {
   const navigate = useNavigate();
-  const { register: registerUser } = useAuth();
+  const { register: registerAuth } = useAuth(); // ← Используем register из контекста
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const {
-    register,
+    register: registerInput, // ← Переименовываем для избежания конфликта
     handleSubmit,
     watch,
     formState: { errors },
@@ -54,7 +54,7 @@ const Register = () => {
         phone: data.phone,
       };
 
-      const result = await registerUser(userData);
+      const result = await registerAuth(userData); // ← вызываем register из AuthContext
 
       if (result.success) {
         navigate('/');
@@ -62,6 +62,7 @@ const Register = () => {
         setError(result.error || 'Ошибка при регистрации');
       }
     } catch (err) {
+      console.error('Ошибка при регистрации:', err);
       setError('Ошибка при регистрации');
     } finally {
       setLoading(false);
@@ -120,7 +121,7 @@ const Register = () => {
                 <TextField
                   fullWidth
                   label="Имя"
-                  {...register('first_name', {
+                  {...registerInput('first_name', {
                     required: 'Имя обязательно',
                   })}
                   error={!!errors.first_name}
@@ -139,7 +140,7 @@ const Register = () => {
                 <TextField
                   fullWidth
                   label="Фамилия"
-                  {...register('last_name', {
+                  {...registerInput('last_name', {
                     required: 'Фамилия обязательна',
                   })}
                   error={!!errors.last_name}
@@ -159,7 +160,7 @@ const Register = () => {
                   fullWidth
                   label="Email"
                   type="email"
-                  {...register('email', {
+                  {...registerInput('email', {
                     required: 'Email обязателен',
                     pattern: {
                       value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
@@ -182,7 +183,7 @@ const Register = () => {
                 <TextField
                   fullWidth
                   label="Телефон"
-                  {...register('phone', {
+                  {...registerInput('phone', {
                     required: 'Телефон обязателен',
                     pattern: {
                       value: /^[\d\s+()-]+$/,
@@ -191,7 +192,7 @@ const Register = () => {
                   })}
                   error={!!errors.phone}
                   helperText={errors.phone?.message}
-                  placeholder="+7 (999) 999-99-99"
+                  placeholder="+7 (999) 999-9999"
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
@@ -207,7 +208,7 @@ const Register = () => {
                   fullWidth
                   label="Пароль"
                   type={showPassword ? 'text' : 'password'}
-                  {...register('password', {
+                  {...registerInput('password', {
                     required: 'Пароль обязателен',
                     minLength: {
                       value: 6,
@@ -241,7 +242,7 @@ const Register = () => {
                   fullWidth
                   label="Подтверждение пароля"
                   type={showPassword ? 'text' : 'password'}
-                  {...register('confirmPassword', {
+                  {...registerInput('confirmPassword', {
                     required: 'Подтвердите пароль',
                     validate: (value) =>
                       value === password || 'Пароли не совпадают',

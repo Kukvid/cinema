@@ -26,6 +26,7 @@ import CinemasManage from './pages/admin/CinemasManage';
 import FilmsManage from './pages/admin/FilmsManage';
 import SessionsManage from './pages/admin/SessionsManage';
 import FoodCategoriesManage from './pages/admin/FoodCategoriesManage';
+import PromocodesManage from './pages/admin/PromocodesManage';
 
 function App() {
   return (
@@ -104,6 +105,14 @@ function App() {
                 element={
                   <PrivateRoute requireAdmin>
                     <FoodCategoriesManage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/promocodes"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <PromocodesManage />
                   </PrivateRoute>
                 }
               />

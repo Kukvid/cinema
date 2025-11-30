@@ -23,6 +23,7 @@ import {
   TrendingUp as TrendingIcon,
   People as PeopleIcon,
   AttachMoney as MoneyIcon,
+  LocalOffer as PromoIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -90,6 +91,12 @@ const Dashboard = () => {
       icon: <CategoryIcon />,
       path: '/admin/food-categories',
       description: 'Управление категориями товаров',
+    },
+    {
+      title: 'Промокоды',
+      icon: <PromoIcon />,
+      path: '/admin/promocodes',
+      description: 'Управление промокодами и скидками',
     },
   ];
 

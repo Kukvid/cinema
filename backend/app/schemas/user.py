@@ -20,7 +20,7 @@ class UserBase(BaseModel):
 
 # Schema for user registration
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
+    password: str = Field(..., min_length=6, description="Password must be at least 6 characters")
     data_processing_consent: bool = Field(default=True, description="User must consent to data processing")
 
 

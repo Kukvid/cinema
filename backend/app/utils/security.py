@@ -17,7 +17,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     """Hash a password for storing."""
     # Ограничиваем длину пароля до 72 байт (требование bcrypt)
-    password_bytes = password.encode('utf-8')[:72]
+    password_bytes = password.encode('utf-8')
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password_bytes, salt)
     return hashed.decode('utf-8')

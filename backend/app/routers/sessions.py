@@ -113,7 +113,7 @@ async def get_session(
     """Get session by ID."""
     result = await db.execute(
         select(Session)
-        .options(selectinload(Session.hall).selectinload(Hall.cinema))
+        .options(selectinload(Session.hall).selectinload(Hall.cinema),selectinload(Session.film))
         .filter(Session.id == session_id)
     )
     session = result.scalar_one_or_none()
@@ -130,6 +130,7 @@ async def get_session(
     # Convert to response format with available_seats
     session_dict = SessionResponse.model_validate(session).model_dump()
     session_dict['available_seats'] = available_seats_map.get(session.id, 0)
+    session_dict['film_title'] = session.film.title
 
     return SessionResponse(**session_dict)
 

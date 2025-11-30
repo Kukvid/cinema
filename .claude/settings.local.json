@@ -13,7 +13,8 @@
       "Bash(find:*)",
       "Bash(source ../.venv/Scripts/activate)",
       "Bash(python -c:*)",
-      "Bash(alembic current:*)"
+      "Bash(alembic current:*)",
+      "Bash(python -m py_compile:*)"
     ],
     "deny": [],
     "ask": []

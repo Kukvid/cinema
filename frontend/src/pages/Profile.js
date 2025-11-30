@@ -245,7 +245,7 @@ const Profile = () => {
                     Роль: <strong>{user?.role === 'admin' ? 'Администратор' : 'Пользователь'}</strong>
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    Дата регистрации: {new Date(user?.created_at).toLocaleDateString('ru-RU')}
+                    Дата регистрации: {new Date(user?.registration_date).toLocaleDateString('ru-RU')}
                   </Typography>
                 </Grid>
               </Grid>

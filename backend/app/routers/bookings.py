@@ -11,18 +11,18 @@ from app.models.ticket import Ticket
 from app.models.session import Session
 from app.models.seat import Seat
 from app.models.payment import Payment
-from app.models.promocode import Promocode
 from app.models.bonus_account import BonusAccount
 from app.models.bonus_transaction import BonusTransaction
 from app.models.user import User
 from app.models.enums import (
     OrderStatus, TicketStatus, PaymentStatus, SalesChannel,
-    PromocodeStatus, DiscountType, BonusTransactionType, PaymentMethod
+    BonusTransactionType, PaymentMethod
 )
 from app.schemas.order import OrderCreate, OrderWithTickets, PaymentCreate, PaymentResponse
 from app.schemas.ticket import TicketResponse
 from app.routers.auth import get_current_active_user
 from app.utils.qr_generator import generate_qr_code
+from app.services.promocode_service import validate_promocode, increment_usage
 import secrets
 
 router = APIRouter()
@@ -99,53 +99,30 @@ async def create_booking(
     # Apply promocode if provided
     discount_amount = Decimal("0.00")
     promocode_id = None
+    promocode = None
 
     if booking_data.promocode_code:
-        result = await db.execute(
-            select(Promocode).filter(Promocode.code == booking_data.promocode_code)
+        # Use the service layer to validate promocode
+        validation_result = await validate_promocode(
+            db=db,
+            code=booking_data.promocode_code,
+            order_amount=total_amount,
+            category="TICKETS"  # Bookings are always for tickets
         )
-        promocode = result.scalar_one_or_none()
 
-        if not promocode:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Promocode not found"
-            )
-
-        # Validate promocode
-        today = datetime.utcnow().date()
-        if promocode.status != PromocodeStatus.ACTIVE:
+        if not validation_result.is_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Promocode is not active"
+                detail=validation_result.message
             )
 
-        if today < promocode.valid_from or today > promocode.valid_until:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Promocode is not valid for current date"
-            )
-
-        if promocode.max_uses and promocode.used_count >= promocode.max_uses:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Promocode usage limit reached"
-            )
-
-        if total_amount < promocode.min_order_amount:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Order amount must be at least {promocode.min_order_amount} to use this promocode"
-            )
-
-        # Calculate discount
-        if promocode.discount_type == DiscountType.PERCENTAGE:
-            discount_amount = (total_amount * promocode.discount_value) / Decimal("100")
-        else:  # FIXED_AMOUNT
-            discount_amount = min(promocode.discount_value, total_amount)
-
+        # Get promocode from validation result
+        promocode = validation_result.promocode
+        discount_amount = validation_result.discount_amount
         promocode_id = promocode.id
-        promocode.used_count += 1
+
+        # Increment usage count (will be committed later with the order)
+        await increment_usage(db, promocode)
 
     # Apply bonus points if requested
     bonus_deduction = Decimal("0.00")

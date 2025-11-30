@@ -4,6 +4,8 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from app.models.enums import SessionStatus
+
+from . import FilmResponse
 from .seat import SeatWithStatus
 from .hall import HallResponse
 from .cinema import CinemaResponse
@@ -58,6 +60,7 @@ class SessionResponse(SessionBase):
     hall_id: int
     status: SessionStatus
     hall: Optional[HallWithCinema] = None
+    film_title: str = None
     available_seats: Optional[int] = None
 
 

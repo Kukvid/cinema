@@ -1,0 +1,42 @@
+# Project Scan Results: Cinema Management System
+
+## Project Overview
+- **Name**: Cinema Management System
+- **Type**: Full-stack web application (Python FastAPI backend, frontend unclear from structure)
+- **Purpose**: Comprehensive cinema management including film scheduling, ticket sales, concessions, and user management
+- **Architecture**: Modern Python FastAPI application with async SQLAlchemy ORM, PostgreSQL database
+
+## Project Structure
+- Backend: Python FastAPI application with models, routers, schemas, services, and utils
+- Frontend: React/Node.js application (based on package.json files)
+- Database: PostgreSQL with Alembic migrations
+- Configuration: Pydantic settings with environment variables
+
+## Key Components
+- Authentication system with JWT tokens
+- Cinema management (cinemas, halls, seats)
+- Film management (films, genres, distributors)
+- Ticket booking and payment system
+- Bonus point system
+- Promocode functionality
+- Concession sales
+- Reporting capabilities
+
+## Technologies Used
+- Backend: FastAPI, SQLAlchemy, PostgreSQL, AsyncPG
+- Frontend: React/Node.js (assumed from structure)
+- Security: JWT, bcrypt, python-jose
+- Utilities: QR codes, reports (PDF/Excel), image processing
+
+## Notable Features
+- Reservation system with 5-minute timeout setting (implementation missing)
+- Bonus point accumulation and usage
+- Promocode system with various discount types
+- Multi-language support capability
+- Comprehensive reporting system
+
+## Development Status
+- Well-structured with clear separation of concerns
+- Comprehensive documentation in markdown files
+- Seeded with test data capability
+- Ready for deployment with proper configuration

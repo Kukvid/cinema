@@ -148,6 +148,13 @@ const SessionBooking = () => {
 
     const handleApplyPromo = (promoData) => {
         setAppliedPromo(promoData);
+        if (promoData) {
+            setSnackbar({
+                open: true,
+                message: `Промокод применён! Скидка ${promoData.discount_amount}${promoData.discount_type === "₽"}`,
+                severity: "success",
+            });
+        }
     };
 
     const calculateTotal = () => {
@@ -318,7 +325,7 @@ const SessionBooking = () => {
                                     variant="h5"
                                     sx={{ fontWeight: 700, mb: 1 }}
                                 >
-                                    {"Фильм: " + session?.film_title || "Фильм"}
+                                    {session?.film?.title || "Фильм"}
                                 </Typography>
                                 <Box
                                     sx={{
