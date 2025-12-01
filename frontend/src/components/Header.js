@@ -57,10 +57,6 @@ const Header = () => {
         handleClose();
     };
 
-    const handleMyTickets = () => {
-        navigate("/my-tickets");
-        handleClose();
-    };
 
     const handleAdmin = () => {
         navigate("/admin");
@@ -124,14 +120,14 @@ const Header = () => {
                                 <Button
                                     color="inherit"
                                     startIcon={<TicketIcon />}
-                                    onClick={() => navigate("/my-tickets")}
+                                    onClick={() => navigate("/my-orders")}
                                     sx={{
                                         "&:hover": {
                                             color: "#e50914",
                                         },
                                     }}
                                 >
-                                    Мои билеты
+                                    Мои заказы
                                 </Button>
                             )}
                             {isAuthenticated && user?.role === "admin" && (
@@ -202,9 +198,9 @@ const Header = () => {
                                             <AccountCircle sx={{ mr: 2 }} />
                                             Профиль
                                         </MenuItem>
-                                        <MenuItem onClick={handleMyTickets}>
+                                        <MenuItem onClick={() => { navigate("/my-orders"); handleClose(); }}>
                                             <TicketIcon sx={{ mr: 2 }} />
-                                            Мои билеты
+                                            Мои заказы
                                         </MenuItem>
                                         {user?.role === "admin" && (
                                             <MenuItem onClick={handleAdmin}>

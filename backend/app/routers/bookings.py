@@ -4,8 +4,10 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
+from app.config import get_settings
 from app.models.order import Order
 from app.models.ticket import Ticket
 from app.models.session import Session
@@ -14,11 +16,13 @@ from app.models.payment import Payment
 from app.models.bonus_account import BonusAccount
 from app.models.bonus_transaction import BonusTransaction
 from app.models.user import User
+from app.models.concession_preorder import ConcessionPreorder
+from app.models.concession_item import ConcessionItem
 from app.models.enums import (
     OrderStatus, TicketStatus, PaymentStatus, SalesChannel,
-    BonusTransactionType, PaymentMethod
+    BonusTransactionType, PaymentMethod, PreorderStatus
 )
-from app.schemas.order import OrderCreate, OrderWithTickets, PaymentCreate, PaymentResponse
+from app.schemas.order import OrderCreate, OrderWithTickets, OrderWithTicketsAndPayment, PaymentResponsePublic, ConcessionPreorderResponse, ConcessionItemResponse
 from app.schemas.ticket import TicketResponse
 from app.routers.auth import get_current_active_user
 from app.utils.qr_generator import generate_qr_code
@@ -145,17 +149,40 @@ async def create_booking(
             )
 
         bonus_deduction = min(booking_data.use_bonus_points, total_amount - discount_amount)
-        bonus_account.balance -= bonus_deduction
+
+        # Check bonus deduction limits
+        settings = get_settings()
+        max_bonus_amount = (total_amount - discount_amount) * Decimal(settings.BONUS_MAX_PERCENTAGE) / Decimal("100")
+
+        if bonus_deduction > max_bonus_amount:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Bonus deduction cannot exceed {settings.BONUS_MAX_PERCENTAGE}% of order amount after discounts"
+            )
 
     final_amount = total_amount - discount_amount - bonus_deduction
 
+    # Check minimum payment amount after applying bonuses and discounts
+    settings = get_settings()
+    if final_amount < Decimal(settings.BONUS_MIN_PAYMENT_AMOUNT):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Final order amount cannot be less than {settings.BONUS_MIN_PAYMENT_AMOUNT} ₽ after applying bonuses and discounts"
+        )
+
     # Create order
+    from datetime import timedelta
     order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{secrets.token_hex(4).upper()}"
+    created_time = datetime.utcnow()
+    settings = get_settings()
+    expiry_time = created_time + timedelta(minutes=settings.ORDER_PAYMENT_TIMEOUT_MINUTES)
+
     new_order = Order(
         user_id=current_user.id,
         promocode_id=promocode_id,
         order_number=order_number,
-        created_at=datetime.utcnow(),
+        created_at=created_time,
+        expires_at=expiry_time,
         total_amount=total_amount,
         discount_amount=discount_amount + bonus_deduction,
         final_amount=final_amount,
@@ -202,107 +229,8 @@ async def create_booking(
     )
 
 
-@router.post("/{order_id}/payment", response_model=PaymentResponse)
-async def process_payment(
-    order_id: int,
-    payment_data: PaymentCreate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: AsyncSession = Depends(get_db)
-):
-    """Process payment for an order (mock payment)."""
-    # Get order
-    result = await db.execute(select(Order).filter(Order.id == order_id))
-    order = result.scalar_one_or_none()
 
-    if not order:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Order with id {order_id} not found"
-        )
-
-    # Verify order belongs to current user
-    if order.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only pay for your own orders"
-        )
-
-    # Check order status
-    if order.status == OrderStatus.PAID:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Order has already been paid"
-        )
-
-    if order.status == OrderStatus.CANCELLED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot pay for cancelled order"
-        )
-
-    # Mock payment processing
-    transaction_id = f"TXN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(4).upper()}"
-
-    # Create payment record
-    new_payment = Payment(
-        order_id=order.id,
-        payment_date=datetime.utcnow(),
-        amount=order.final_amount,
-        payment_method=PaymentMethod(payment_data.payment_method),
-        transaction_id=transaction_id,
-        status=PaymentStatus.PAID,
-        card_last_digits=payment_data.card_number[-4:] if payment_data.card_number else None
-    )
-    db.add(new_payment)
-
-    # Update order status
-    order.status = OrderStatus.PAID
-
-    # Update ticket statuses and generate QR codes
-    result = await db.execute(select(Ticket).filter(Ticket.order_id == order.id))
-    tickets = result.scalars().all()
-
-    for ticket in tickets:
-        ticket.status = TicketStatus.PAID
-        # Generate QR code
-        qr_data = f"TICKET-{ticket.id}-{transaction_id}"
-        ticket.qr_code = generate_qr_code(qr_data)
-
-    # Add bonus points (10% of total amount)
-    bonus_points = (order.total_amount * Decimal("0.10")).quantize(Decimal("0.01"))
-
-    result = await db.execute(select(BonusAccount).filter(BonusAccount.user_id == current_user.id))
-    bonus_account = result.scalar_one_or_none()
-
-    if bonus_account:
-        bonus_account.balance += bonus_points
-
-        # Create bonus transaction record
-        if tickets:  # Use first ticket for the transaction
-            bonus_transaction = BonusTransaction(
-                bonus_account_id=bonus_account.id,
-                ticket_id=tickets[0].id,
-                transaction_date=datetime.utcnow(),
-                amount=bonus_points,
-                transaction_type=BonusTransactionType.ACCRUAL,
-                description=f"Bonus accrual for order {order.order_number}"
-            )
-            db.add(bonus_transaction)
-
-    await db.commit()
-    await db.refresh(new_payment)
-
-    return PaymentResponse(
-        id=new_payment.id,
-        order_id=new_payment.order_id,
-        status=new_payment.status.value,
-        payment_method=new_payment.payment_method.value,
-        transaction_id=new_payment.transaction_id,
-        message="Payment processed successfully"
-    )
-
-
-@router.get("/my", response_model=List[OrderWithTickets])
+@router.get("/my", response_model=List[OrderWithTicketsAndPayment])
 async def get_my_bookings(
     current_user: Annotated[User, Depends(get_current_active_user)],
     db: AsyncSession = Depends(get_db)
@@ -315,25 +243,85 @@ async def get_my_bookings(
     )
     orders = result.scalars().all()
 
-    # Get tickets for each order
-    orders_with_tickets = []
+    # Get tickets, payment and concession preorders for each order
+    orders_with_details = []
     for order in orders:
+        # Get tickets
         result = await db.execute(
             select(Ticket).filter(Ticket.order_id == order.id)
         )
         tickets = result.scalars().all()
 
-        orders_with_tickets.append(OrderWithTickets(
+        # Get payment
+        result = await db.execute(
+            select(Payment).filter(Payment.order_id == order.id)
+        )
+        payment = result.scalar_one_or_none()
+
+        # Get concession preorders
+        result = await db.execute(
+            select(ConcessionPreorder)
+            .options(selectinload(ConcessionPreorder.concession_item))
+            .filter(ConcessionPreorder.order_id == order.id)
+        )
+        concession_preorders = result.scalars().all()
+
+        # Create payment response if payment exists
+        payment_response = None
+        if payment:
+            payment_response = PaymentResponsePublic(
+                id=payment.id,
+                order_id=payment.order_id,
+                status=payment.status.value,
+                payment_method=payment.payment_method.value,
+                transaction_id=payment.transaction_id,
+                card_last_four=payment.card_last_four,
+                payment_date=payment.payment_date,
+                amount=payment.amount
+            )
+
+        # Create concession preorder responses
+        concession_responses = []
+        for preorder in concession_preorders:
+            concession_item_response = None
+            if preorder.concession_item:
+                concession_item_response = ConcessionItemResponse(
+                    id=preorder.concession_item.id,
+                    name=preorder.concession_item.name,
+                    description=preorder.concession_item.description,
+                    price=preorder.concession_item.price,
+                    category_id=preorder.concession_item.category_id
+                )
+
+            concession_responses.append(
+                ConcessionPreorderResponse(
+                    id=preorder.id,
+                    order_id=preorder.order_id,
+                    concession_item_id=preorder.concession_item_id,
+                    quantity=preorder.quantity,
+                    unit_price=preorder.unit_price,
+                    total_price=preorder.total_price,
+                    status=preorder.status.value,
+                    pickup_code=preorder.pickup_code,
+                    pickup_date=preorder.pickup_date,
+                    concession_item=concession_item_response
+                )
+            )
+
+        orders_with_details.append(OrderWithTicketsAndPayment(
             id=order.id,
             user_id=order.user_id,
             promocode_id=order.promocode_id,
             order_number=order.order_number,
             created_at=order.created_at,
+            expires_at=order.expires_at,
             total_amount=order.total_amount,
             discount_amount=order.discount_amount,
             final_amount=order.final_amount,
             status=order.status,
-            tickets=[TicketResponse.model_validate(ticket) for ticket in tickets]
+            tickets=[TicketResponse.model_validate(ticket) for ticket in tickets],
+            payment=payment_response,
+            concession_preorders=concession_responses
         ))
 
-    return orders_with_tickets
+    return orders_with_details

@@ -154,9 +154,9 @@ const PaymentPage = () => {
             
             if (result.status === "paid") {
                 setPaymentSuccess(true);
-                // Немедленно перенаправляем на страницу билетов (без задержки или с короткой задержкой)
+                // Немедленно перенаправляем на страницу заказов (без задержки или с короткой задержкой)
                 setTimeout(() => {
-                    navigate("/my-tickets"); // Перенаправление на страницу моих билетов
+                    navigate("/my-orders"); // Перенаправление на страницу моих заказов
                 }, 1500); // Сокращаем задержку для лучшего UX
             } else {
                 setError(result.message || "Ошибка при обработке платежа");
@@ -196,7 +196,7 @@ const PaymentPage = () => {
                         Оплата прошла успешно!
                     </Typography>
                     <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
-                        Ваш заказ #{order?.order_number} оплачен. Билеты доступны в разделе "Мои билеты".
+                        Ваш заказ #{order?.order_number} оплачен. Заказ доступен в разделе "Мои заказы".
                     </Typography>
                     <CircularProgress />
                     <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>

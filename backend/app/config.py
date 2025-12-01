@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # Bonus System
     BONUS_ACCRUAL_PERCENTAGE: int = 10
     BONUS_POINTS_PER_RUBLE: int = 1
+    BONUS_INITIAL_AMOUNT: int = 500
+    BONUS_MAX_PERCENTAGE: int = 99
+    BONUS_MIN_PAYMENT_AMOUNT: int = 11
 
     # Reservation
     SEAT_RESERVATION_TIMEOUT_MINUTES: int = 5

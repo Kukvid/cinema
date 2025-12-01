@@ -63,6 +63,7 @@ class UserResponse(BaseModel):
     preferred_language: str
     role_id: Optional[int] = None
     cinema_id: Optional[int] = None
+    bonus_balance: Optional[float] = None
 
 
 # JWT Token response

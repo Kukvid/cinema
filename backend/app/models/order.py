@@ -13,6 +13,7 @@ class Order(Base):
 
     order_number = Column(String(50), unique=True, nullable=False, index=True)
     created_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
     total_amount = Column(DECIMAL(12, 2), nullable=False)
     discount_amount = Column(DECIMAL(8, 2), default=0.00)
     final_amount = Column(DECIMAL(12, 2), nullable=False)
@@ -25,6 +26,7 @@ class Order(Base):
     tickets = relationship("Ticket", back_populates="order")
     payment = relationship("Payment", back_populates="order", uselist=False, cascade="all, delete-orphan")
     concession_preorders = relationship("ConcessionPreorder", back_populates="order", cascade="all, delete-orphan")
+    bonus_transactions = relationship("BonusTransaction", back_populates="order")
 
     # Constraints
     __table_args__ = (

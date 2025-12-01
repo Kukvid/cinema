@@ -159,15 +159,19 @@ async def get_session_seats(
     )
     seats = result.scalars().all()
 
-    # Get booked tickets for this session
+    # Get booked tickets for this session (including expired/cancelled to show different statuses)
     result = await db.execute(
         select(Ticket).filter(
-            Ticket.session_id == session_id,
-            Ticket.status.in_([TicketStatus.RESERVED, TicketStatus.PAID])
+            Ticket.session_id == session_id
         )
     )
-    booked_tickets = result.scalars().all()
-    booked_seat_ids = {ticket.seat_id: ticket.id for ticket in booked_tickets}
+    all_tickets = result.scalars().all()
+
+    # Create mapping of seat_id to ticket_id and status for all tickets
+    seat_ticket_mapping = {ticket.seat_id: {'id': ticket.id, 'status': ticket.status.value} for ticket in all_tickets}
+
+    # Only seats with active tickets (not expired/cancelled) should be considered as booked
+    booked_seat_ids = {ticket.seat_id: ticket.id for ticket in all_tickets if ticket.status in [TicketStatus.RESERVED, TicketStatus.PAID]}
 
     # Create seat list with booking status
     seats_with_status = []
@@ -178,6 +182,11 @@ async def get_session_seats(
         if not is_booked and seat.is_available:
             available_count += 1
 
+        # Get ticket status if seat has a ticket
+        ticket_info = seat_ticket_mapping.get(seat.id)
+        ticket_status = ticket_info['status'] if ticket_info else None
+        ticket_id = ticket_info['id'] if ticket_info else None
+
         seats_with_status.append(SeatWithStatus(
             id=seat.id,
             hall_id=seat.hall_id,
@@ -186,7 +195,8 @@ async def get_session_seats(
             is_aisle=seat.is_aisle,
             is_available=seat.is_available,
             is_booked=is_booked,
-            ticket_id=booked_seat_ids.get(seat.id)
+            ticket_id=ticket_id,
+            ticket_status=ticket_status
         ))
 
     return SessionWithSeats(

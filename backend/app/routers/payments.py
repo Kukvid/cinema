@@ -134,6 +134,31 @@ async def process_payment(
         qr_data = f"ORDER-{order.id}-{transaction_id}"
         order.qr_code = generate_qr_code(qr_data)
 
+        # Process bonus deductions if any were requested during booking
+        if order.discount_amount > 0 and order.discount_amount != (order.promocode.discount_amount if order.promocode else 0):
+            # Some of the discount was from bonus points, so we need to debit them
+            bonus_deduction = order.discount_amount - (order.promocode.discount_amount if order.promocode else 0) if order.promocode else order.discount_amount
+
+            result = await db.execute(
+                select(BonusAccount).filter(BonusAccount.user_id == current_user.id)
+            )
+            bonus_account = result.scalar_one_or_none()
+
+            if bonus_account:
+                # Deduct the bonus points from the user's account
+                bonus_account.balance -= float(bonus_deduction)
+
+                # Create a bonus transaction record for the deduction
+                bonus_deduction_transaction = BonusTransaction(
+                    bonus_account_id=bonus_account.id,
+                    order_id=order.id,
+                    transaction_date=datetime.utcnow(),
+                    amount=-float(bonus_deduction),  # Negative amount for deduction
+                    transaction_type=BonusTransactionType.DEDUCTION,
+                    description="Списание бонусов за заказ"
+                )
+                db.add(bonus_deduction_transaction)
+
         # Add bonus points (10% of total amount)
         bonus_points = (order.total_amount * Decimal("0.10")).quantize(Decimal("0.01"))
 
@@ -145,11 +170,21 @@ async def process_payment(
         if bonus_account:
             bonus_account.balance += bonus_points
 
-            # Create bonus transaction record for first ticket
+            # Create bonus transaction record for the order
             if tickets:
                 bonus_transaction = BonusTransaction(
                     bonus_account_id=bonus_account.id,
-                    ticket_id=tickets[0].id,
+                    order_id=order.id,  # Link to the order for which bonus is accrued
+                    transaction_date=datetime.utcnow(),
+                    amount=bonus_points,
+                    transaction_type=BonusTransactionType.ACCRUAL
+                )
+                db.add(bonus_transaction)
+            else:
+                # Create bonus transaction for the order
+                bonus_transaction = BonusTransaction(
+                    bonus_account_id=bonus_account.id,
+                    order_id=order.id,
                     transaction_date=datetime.utcnow(),
                     amount=bonus_points,
                     transaction_type=BonusTransactionType.ACCRUAL

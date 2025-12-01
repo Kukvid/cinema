@@ -31,13 +31,57 @@ class OrderResponse(OrderBase):
     promocode_id: Optional[int] = None
     order_number: str
     created_at: datetime
+    expires_at: datetime
     status: OrderStatus
     qr_code: Optional[str] = None
 
 
+# Public payment response schema for order display
+class PaymentResponsePublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    order_id: int
+    status: str
+    payment_method: str
+    transaction_id: Optional[str] = None
+    card_last_four: Optional[str] = None
+    payment_date: datetime
+    amount: Decimal
+
+# Concession item response for order details
+class ConcessionItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: Optional[str] = None
+    price: Decimal
+    category_id: Optional[int] = None
+
+# Response for concession preorder included in orders
+class ConcessionPreorderResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    order_id: int
+    concession_item_id: int
+    quantity: int
+    unit_price: Decimal
+    total_price: Decimal
+    status: str
+    pickup_code: Optional[str] = None
+    pickup_date: Optional[datetime] = None
+    concession_item: Optional['ConcessionItemResponse'] = None
+
 # Schema for order with tickets
 class OrderWithTickets(OrderResponse):
     tickets: List[TicketResponse] = []
+
+# Schema for order with tickets and payment info
+class OrderWithTicketsAndPayment(OrderWithTickets):
+    payment: Optional['PaymentResponsePublic'] = None
+    concession_preorders: List['ConcessionPreorderResponse'] = []
 
 
 # Schema for payment processing

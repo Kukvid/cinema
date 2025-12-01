@@ -205,7 +205,13 @@ const SessionBooking = () => {
         // Вычитаем бонусы
         let bonusDeduction = 0;
         if (useBonuses && bonusAmount > 0) {
-            bonusDeduction = Math.min(parseFloat(bonusAmount) || 0, totalAfterDiscount);
+            // Ограничиваем бонусы максимальным значением, которое позволяет оставить минимум 11 ₽ к оплате
+            const maxBonusForMinPayment = Math.max(0, totalAfterDiscount - 11);
+            bonusDeduction = Math.min(
+                parseFloat(bonusAmount) || 0,
+                totalAfterDiscount, // Не больше общей суммы после скидки
+                maxBonusForMinPayment // Не меньше, чем позволяет минимальная сумма оплаты
+            );
         }
 
         const finalTotal = Math.max(0, totalAfterDiscount - bonusDeduction);
@@ -846,30 +852,44 @@ const SessionBooking = () => {
                                     label={`Использовать бонусы (доступно: ${user.bonus_balance.toFixed(2)})`}
                                 />
                                 {useBonuses && (
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        type="number"
-                                        label="Количество бонусов"
-                                        value={bonusAmount}
-                                        onChange={(e) =>
-                                            setBonusAmount(
-                                                Math.min(
-                                                    parseFloat(e.target.value) || 0,
-                                                    user.bonus_balance,
-                                                    subtotal // Максимум до применения промокода
-                                                )
-                                            )
-                                        }
-                                        inputProps={{
-                                            min: 0,
-                                            max: Math.min(
-                                                user.bonus_balance,
-                                                subtotal // Максимум до применения промокода
-                                            ),
-                                        }}
-                                        sx={{ mt: 1 }}
-                                    />
+                                    <>
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                            Максимум можно использовать {Math.min(user.bonus_balance, (subtotal - discountAmount) * 0.99, subtotal - discountAmount - 11).toFixed(2)} бонусов
+                                            (до {Math.min(user.bonus_balance, (subtotal - discountAmount) * 0.99).toFixed(2)} при условии оплаты минимум 11 ₽)
+                                        </Typography>
+                                        <TextField
+                                            fullWidth
+                                            size="small"
+                                            type="number"
+                                            label="Количество бонусов"
+                                            value={bonusAmount}
+                                            onChange={(e) => {
+                                                const totalAfterDiscount = Math.max(0, subtotal - discountAmount);
+                                                const maxBonusAllowed = Math.min(
+                                                    user?.bonus_balance || 0,
+                                                    totalAfterDiscount * 0.99 // 99% от общей суммы после промокода
+                                                );
+                                                const minPaymentRequired = 11;
+                                                const maxBonusBasedOnMinPayment = Math.max(0, totalAfterDiscount - minPaymentRequired);
+                                                const maxPossibleBonus = Math.min(maxBonusAllowed, maxBonusBasedOnMinPayment);
+
+                                                const newBonusAmount = Math.min(
+                                                    Math.max(0, parseFloat(e.target.value) || 0),
+                                                    maxPossibleBonus
+                                                );
+                                                setBonusAmount(newBonusAmount);
+                                            }}
+                                            inputProps={{
+                                                min: 0,
+                                                max: Math.min(
+                                                    user?.bonus_balance || 0,
+                                                    (subtotal - discountAmount) * 0.99, // 99% от суммы после скидки
+                                                    Math.max(0, (subtotal - discountAmount) - 11) // чтобы осталось минимум 11 ₽
+                                                ),
+                                            }}
+                                            sx={{ mt: 1 }}
+                                        />
+                                    </>
                                 )}
                             </Box>
                         )}

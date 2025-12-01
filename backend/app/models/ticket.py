@@ -25,7 +25,6 @@ class Ticket(Base):
     buyer = relationship("User", back_populates="purchased_tickets", foreign_keys=[buyer_id])
     seller = relationship("User", back_populates="sold_tickets", foreign_keys=[seller_id])
     order = relationship("Order", back_populates="tickets")
-    bonus_transactions = relationship("BonusTransaction", back_populates="ticket")
 
     # Constraints
     __table_args__ = (

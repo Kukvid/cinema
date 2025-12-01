@@ -19,6 +19,7 @@ import Register from './pages/Register';
 // User Pages
 import Profile from './pages/Profile';
 import MyTickets from './pages/MyTickets';
+import MyOrders from './pages/MyOrders';
 import PaymentPage from './pages/PaymentPage';
 
 // Admin Pages
@@ -64,6 +65,15 @@ function App() {
                 element={
                   <PrivateRoute>
                     <MyTickets />
+                  </PrivateRoute>
+                }
+              />
+
+              <Route
+                path="/my-orders"
+                element={
+                  <PrivateRoute>
+                    <MyOrders />
                   </PrivateRoute>
                 }
               />

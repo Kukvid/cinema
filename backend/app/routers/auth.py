@@ -11,6 +11,7 @@ from app.models.bonus_account import BonusAccount
 from app.models.enums import UserStatus
 from app.schemas.user import UserCreate, UserLogin, UserResponse, Token
 from app.utils.security import verify_password, get_password_hash, create_access_token, create_refresh_token, decode_token
+from app.config import get_settings
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -97,10 +98,11 @@ async def register(
     db.add(new_user)
     await db.flush()
 
-    # Create bonus account for new user
+    # Create bonus account for new user with initial bonus
+    settings = get_settings()
     bonus_account = BonusAccount(
         user_id=new_user.id,
-        balance=0.00
+        balance=float(settings.BONUS_INITIAL_AMOUNT)
     )
     db.add(bonus_account)
 
@@ -150,10 +152,25 @@ async def login(
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(
-    current_user: Annotated[User, Depends(get_current_active_user)]
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db)
 ):
     """Get current user profile."""
-    return current_user
+    # Get user's bonus account balance
+    from sqlalchemy import select
+    from app.models.bonus_account import BonusAccount
+
+    bonus_account_result = await db.execute(
+        select(BonusAccount).filter(BonusAccount.user_id == current_user.id)
+    )
+    bonus_account = bonus_account_result.scalar_one_or_none()
+
+    # Create user response with bonus balance
+    user_dict = current_user.__dict__.copy()
+    user_dict['bonus_balance'] = bonus_account.balance if bonus_account else 0.00
+
+    # Convert to UserResponse model
+    return UserResponse.model_validate(user_dict)
 
 
 @router.post("/refresh", response_model=Token)

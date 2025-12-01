@@ -33,3 +33,4 @@ class SeatResponse(SeatBase):
 class SeatWithStatus(SeatResponse):
     is_booked: bool = False
     ticket_id: Optional[int] = None
+    ticket_status: Optional[str] = None  # Status of the ticket if booked (reserved, paid, cancelled, etc.)

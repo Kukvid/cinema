@@ -5,16 +5,31 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import engine
 from app.models import Base
+from app.tasks import OrderCleanupService
+
+
+# Global task service instance
+task_service = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global task_service
     # Startup
     print("Starting up Cinema Management System...")
     # Database tables will be created by Alembic migrations
+
+    # Initialize and start order cleanup service
+    task_service = OrderCleanupService(settings.DATABASE_URL)
+    task_service.start_scheduler()
+    print("Order cleanup service started")
+
     yield
+
     # Shutdown
     print("Shutting down...")
+    if task_service:
+        task_service.stop_scheduler()
     await engine.dispose()
 
 

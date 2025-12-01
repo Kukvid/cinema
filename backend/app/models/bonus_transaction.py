@@ -9,7 +9,7 @@ class BonusTransaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     bonus_account_id = Column(Integer, ForeignKey("bonus_accounts.id", ondelete="CASCADE"), nullable=False)
-    ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="SET NULL"))
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="SET NULL"))
 
     transaction_type = Column(SQLEnum(BonusTransactionType), nullable=False)
     amount = Column(Integer, nullable=False)
@@ -17,7 +17,7 @@ class BonusTransaction(Base):
 
     # Relationships
     bonus_account = relationship("BonusAccount", back_populates="transactions")
-    ticket = relationship("Ticket", back_populates="bonus_transactions")
+    order = relationship("Order", back_populates="bonus_transactions")
 
     # Indexes
     __table_args__ = (

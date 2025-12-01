@@ -20,3 +20,4 @@ qrcode[pil]==7.4.2
 reportlab==4.0.7              # для генерации PDF
 openpyxl==3.1.2               # для Excel отчетов
 Pillow==10.1.0                # для работы с изображениями
+apscheduler==3.10.4
