@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta
 from typing import List, Annotated
+import pytz
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
@@ -59,6 +60,7 @@ async def get_sessions(
     film_id: int | None = Query(None, description="Filter by film ID"),
     session_date: date | None = Query(None, description="Filter by date"),
     status_filter: SessionStatus | None = Query(None, alias="status", description="Filter by status"),
+    include_past: bool = Query(False, description="Include past sessions in results"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     db: AsyncSession = Depends(get_db)
@@ -68,6 +70,11 @@ async def get_sessions(
         selectinload(Session.hall).selectinload(Hall.cinema),
         selectinload(Session.film)
     )
+
+    # Filter out past sessions unless explicitly requested
+    if not include_past:
+        current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+        query = query.filter(Session.end_datetime > current_time)
 
     if film_id:
         query = query.filter(Session.film_id == film_id)

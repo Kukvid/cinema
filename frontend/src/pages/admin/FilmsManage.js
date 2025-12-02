@@ -15,6 +15,15 @@ import {
   DialogActions,
   TextField,
   Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Chip,
+  OutlinedInput,
+  Checkbox,
+  ListItemText,
+  ListItem
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -24,10 +33,12 @@ import {
 } from '@mui/icons-material';
 import Loading from '../../components/Loading';
 import { filmsAPI } from '../../api/films';
+import { genresAPI } from '../../api/genres';
 import { useForm } from 'react-hook-form';
 
 const FilmsManage = () => {
   const [films, setFilms] = useState([]);
+  const [genres, setGenres] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -40,17 +51,41 @@ const FilmsManage = () => {
     handleSubmit,
     reset,
     formState: { errors },
+    setValue,
+    watch
   } = useForm();
 
+  // Watch for selected genres
+  const watchedGenreIds = watch('genre_ids') || [];
+
   useEffect(() => {
-    loadFilms();
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [filmsData, genresData] = await Promise.all([
+        filmsAPI.getFilms(),
+        genresAPI.getGenres()
+      ]);
+      // API returns paginated response with items field
+      setFilms(filmsData.items || filmsData);  // Handle both paginated and non-paginated responses
+      setGenres(genresData);
+      setError(null);
+    } catch (err) {
+      setError('Не удалось загрузить данные');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadFilms = async () => {
     try {
       setLoading(true);
       const data = await filmsAPI.getFilms();
-      setFilms(data);
+      // API returns paginated response with items field
+      setFilms(data.items || data);  // Handle both paginated and non-paginated responses
       setError(null);
     } catch (err) {
       setError('Не удалось загрузить фильмы');
@@ -62,9 +97,35 @@ const FilmsManage = () => {
   const handleOpenDialog = (film = null) => {
     setEditingFilm(film);
     if (film) {
-      reset(film);
+      // For editing, convert existing genre or genre_ids to an array of genre IDs
+      let genreIds = [];
+      if (film.genres && Array.isArray(film.genres)) {
+        // If the film object has a genres property with actual genre objects
+        genreIds = film.genres.map(g => g.id);
+      } else if (film.genre_ids && Array.isArray(film.genre_ids)) {
+        // If the film object has genre_ids property
+        genreIds = film.genre_ids;
+      } else if (film.genre) {
+        // If the film object has a single genre string, try to find it in our genres
+        const genreObj = genres.find(g => g.name.toLowerCase() === film.genre.toLowerCase());
+        if (genreObj) {
+          genreIds = [genreObj.id];
+        }
+      }
+
+      reset({
+        ...film,
+        genre_ids: genreIds
+      });
     } else {
-      reset({ title: '', description: '', genre: '', duration: 0, rating: 0 });
+      reset({
+        title: '',
+        description: '',
+        genre_ids: [],
+        duration: 0,
+        rating: 0,
+        trailer_url: ''
+      });
     }
     setPosterFile(null);
     setDialogOpen(true);
@@ -80,11 +141,19 @@ const FilmsManage = () => {
   const onSubmit = async (data) => {
     try {
       setFormLoading(true);
+      setError(null);
+
+      // Prepare film data with genre_ids
+      const filmData = {
+        ...data,
+        genre_ids: data.genre_ids || []  // Ensure genre_ids is always an array
+      };
+
       let film;
       if (editingFilm) {
-        film = await filmsAPI.updateFilm(editingFilm.id, data);
+        film = await filmsAPI.updateFilm(editingFilm.id, filmData);
       } else {
-        film = await filmsAPI.createFilm(data);
+        film = await filmsAPI.createFilm(filmData);
       }
 
       // Загружаем постер если выбран
@@ -95,7 +164,7 @@ const FilmsManage = () => {
       await loadFilms();
       handleCloseDialog();
     } catch (err) {
-      setError('Не удалось сохранить фильм');
+      setError(err.response?.data?.detail || 'Не удалось сохранить фильм');
     } finally {
       setFormLoading(false);
     }
@@ -165,7 +234,9 @@ const FilmsManage = () => {
                   {film.title}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  {film.genre} • {film.duration} мин
+                  {film.genres && Array.isArray(film.genres) && film.genres.length > 0
+                    ? film.genres.map(g => g.name).join(', ')
+                    : film.genre || 'Без жанра'} • {film.duration} мин
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <IconButton onClick={() => handleOpenDialog(film)} color="primary" size="small">
@@ -204,12 +275,49 @@ const FilmsManage = () => {
               rows={3}
               {...register('description')}
             />
-            <TextField
-              fullWidth
-              label="Жанр"
-              margin="normal"
-              {...register('genre')}
-            />
+            <FormControl fullWidth margin="normal" error={!!errors.genre_ids}>
+              <InputLabel>Жанры</InputLabel>
+              <Select
+                label="Жанры"
+                multiple
+                value={watchedGenreIds}
+                onChange={(e) => {
+                  setValue('genre_ids', e.target.value);
+                }}
+                input={<OutlinedInput label="Жанры" />}
+                renderValue={(selected) => (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {selected.map((genreId) => {
+                      const genre = genres.find(g => g.id === genreId);
+                      return (
+                        <Chip
+                          key={genreId}
+                          label={genre?.name}
+                          size="small"
+                          sx={{
+                            background: 'linear-gradient(135deg, rgba(229, 9, 20, 0.3) 0%, rgba(229, 9, 20, 0.1) 100%)',
+                            color: '#fff',
+                            fontWeight: 600,
+                          }}
+                        />
+                      );
+                    })}
+                  </Box>
+                )}
+              >
+                {genres.map((genre) => (
+                  <MenuItem key={genre.id} value={genre.id}>
+                    <Checkbox checked={watchedGenreIds.indexOf(genre.id) > -1} />
+                    <ListItemText primary={genre.name} />
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.genre_ids && (
+                <Typography variant="caption" color="error">
+                  Выберите хотя бы один жанр
+                </Typography>
+              )}
+            </FormControl>
             <TextField
               fullWidth
               label="Длительность (мин)"

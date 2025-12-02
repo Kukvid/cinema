@@ -6,18 +6,20 @@ const SeatMap = ({ seats, selectedSeats, onSeatSelect }) => {
     const getSeatColor = (seat) => {
         if (seat.seat_type === "aisle") return "transparent";
         if (selectedSeats.includes(seat.id)) return "#2196f3"; // Синий - выбрано
-        if (seat.is_booked) return "#f44336"; // Красный - занято
-        return "#46d369"; // Зеленый - свободно
+        if (seat.ticket_status === "paid") return "#f44336"; // Красный - оплачено
+        if (seat.ticket_status === "reserved") return "#e76118ff"; // Оранжевый - забронировано, ожидает оплаты
+        if (seat.is_booked) return "#f44336"; // Красный - занято (для совместимости)
+        return "#46d369"; // Зеленый - свободно (включая отмененные)
     };
 
     const getSeatHoverColor = (seat) => {
-        if (seat.seat_type === "aisle" || seat.is_booked) return "transparent";
+        if (seat.seat_type === "aisle" || seat.ticket_status === "paid" || seat.ticket_status === "reserved") return "transparent";
         if (selectedSeats.includes(seat.id)) return "#1976d2";
         return "#2e7d32";
     };
 
     const handleSeatClick = (seat) => {
-        if (seat.seat_type === "aisle" || seat.is_booked) return;
+        if (seat.seat_type === "aisle" || seat.ticket_status === "paid" || seat.ticket_status === "reserved") return;
         onSeatSelect(seat);
     };
 
@@ -175,10 +177,19 @@ const SeatMap = ({ seats, selectedSeats, onSeatSelect }) => {
                 />
                 <Chip
                     icon={<SeatIcon sx={{ color: "#ffffffff !important" }} />}
-                    label="Занято"
+                    label="Оплачен"
                     sx={{
                         backgroundColor: "#f44336",
                         color: "#fff",
+                        fontWeight: 600,
+                    }}
+                />
+                <Chip
+                    icon={<SeatIcon sx={{ color: "#ffffffff !important" }} />}
+                    label="Бронь (ожидает оплаты)"
+                    sx={{
+                        backgroundColor: "#e76118ff",
+                        color: "#ffffffff",
                         fontWeight: 600,
                     }}
                 />

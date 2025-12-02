@@ -73,7 +73,7 @@ const SessionsManage = () => {
                 cinemasAPI.getCinemas(),
             ]);
             setSessions(sessionsData);
-            setFilms(filmsData);
+            setFilms(filmsData.items || filmsData);  // Handle both paginated and non-paginated responses
             setCinemas(cinemasData);
             setError(null);
         } catch (err) {

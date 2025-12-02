@@ -1,0 +1,333 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Grid
+} from '@mui/material';
+import {
+  PersonAdd as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Save as SaveIcon,
+  Cancel as CancelIcon
+} from '@mui/icons-material';
+import { usersAPI } from '../../api/users';
+import { rolesAPI } from '../../api/roles';
+import Loading from '../../components/Loading';
+
+const UserManagement = () => {
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    role_id: '',
+    status: 'active'
+  });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [usersData, rolesData] = await Promise.all([
+        usersAPI.getUsers(),
+        rolesAPI.getRoles()
+      ]);
+      setUsers(usersData);
+      setRoles(rolesData);
+    } catch (err) {
+      setError('Не удалось загрузить данные пользователей');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenDialog = (user = null) => {
+    if (user) {
+      setEditingUser(user);
+      setFormData({
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        role_id: user.role_id || '',
+        status: user.status || 'active'
+      });
+    } else {
+      setEditingUser(null);
+      setFormData({
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        role_id: '',
+        status: 'active'
+      });
+    }
+    setDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+    setEditingUser(null);
+    setFormData({
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone: '',
+      role_id: '',
+      status: 'active'
+    });
+  };
+
+  const handleSubmit = async () => {
+    try {
+      if (editingUser) {
+        await usersAPI.updateUser(editingUser.id, formData);
+      } else {
+        await usersAPI.createUser(formData);
+      }
+      await loadData();
+      handleCloseDialog();
+    } catch (err) {
+      setError('Не удалось сохранить пользователя');
+    }
+  };
+
+  const handleDelete = async (userId) => {
+    if (window.confirm('Удалить пользователя?')) {
+      try {
+        await usersAPI.deleteUser(userId);
+        await loadData();
+      } catch (err) {
+        setError('Не удалось удалить пользователя');
+      }
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  if (loading) {
+    return <Loading message="Загрузка пользователей..." />;
+  }
+
+  return (
+    <Container maxWidth="lg" sx={{ py: 6 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight: 700,
+            background: 'linear-gradient(135deg, #e50914 0%, #ffd700 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
+          Управление пользователями
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => handleOpenDialog()}
+          sx={{
+            background: 'linear-gradient(135deg, #e50914 0%, #b00710 100%)',
+            '&:hover': {
+              background: 'linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)',
+            },
+          }}
+        >
+          Добавить пользователя
+        </Button>
+      </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>ID</TableCell>
+              <TableCell>Имя</TableCell>
+              <TableCell>Фамилия</TableCell>
+              <TableCell>Email</TableCell>
+              <TableCell>Телефон</TableCell>
+              <TableCell>Роль</TableCell>
+              <TableCell>Статус</TableCell>
+              <TableCell>Дата регистрации</TableCell>
+              <TableCell>Действия</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>{user.id}</TableCell>
+                <TableCell>{user.first_name}</TableCell>
+                <TableCell>{user.last_name}</TableCell>
+                <TableCell>{user.email}</TableCell>
+                <TableCell>{user.phone}</TableCell>
+                <TableCell>{roles.find(r => r.id === user.role_id)?.name || 'N/A'}</TableCell>
+                <TableCell>{user.status}</TableCell>
+                <TableCell>{new Date(user.registration_date).toLocaleDateString()}</TableCell>
+                <TableCell>
+                  <Button
+                    startIcon={<EditIcon />}
+                    onClick={() => handleOpenDialog(user)}
+                    color="primary"
+                    size="small"
+                    sx={{ mr: 1 }}
+                  >
+                    Редактировать
+                  </Button>
+                  <Button
+                    startIcon={<DeleteIcon />}
+                    onClick={() => handleDelete(user.id)}
+                    color="error"
+                    size="small"
+                  >
+                    Удалить
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Modal for creating/editing user */}
+      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {editingUser ? 'Редактировать пользователя' : 'Добавить пользователя'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Имя"
+                name="first_name"
+                value={formData.first_name}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Фамилия"
+                name="last_name"
+                value={formData.last_name}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Email"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Телефон"
+                name="phone"
+                value={formData.phone}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Роль</InputLabel>
+                <Select
+                  name="role_id"
+                  value={formData.role_id}
+                  onChange={handleInputChange}
+                >
+                  {roles.map((role) => (
+                    <MenuItem key={role.id} value={role.id}>
+                      {role.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Статус</InputLabel>
+                <Select
+                  name="status"
+                  value={formData.status}
+                  onChange={handleInputChange}
+                >
+                  <MenuItem value="active">Активен</MenuItem>
+                  <MenuItem value="inactive">Неактивен</MenuItem>
+                  <MenuItem value="blocked">Заблокирован</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog} startIcon={<CancelIcon />}>
+            Отмена
+          </Button>
+          <Button 
+            onClick={handleSubmit} 
+            variant="contained" 
+            startIcon={<SaveIcon />}
+            sx={{
+              background: 'linear-gradient(135deg, #46d369 0%, #2e7d32 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5ce67c 0%, #388e3c 100%)',
+              },
+            }}
+          >
+            Сохранить
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
+  );
+};
+
+export default UserManagement;

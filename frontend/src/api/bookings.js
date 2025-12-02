@@ -11,6 +11,13 @@ export const bookingsAPI = {
     return response.data;
   },
 
+  getMyBookingsPaginated: async (skip = 0, limit = 20) => {
+    const response = await axios.get('/bookings/my/paginated', {
+      params: { skip, limit }
+    });
+    return response.data;
+  },
+
   getBookingById: async (id) => {
     const response = await axios.get(`/bookings/${id}`);
     return response.data;

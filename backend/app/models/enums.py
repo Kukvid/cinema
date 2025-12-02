@@ -1,6 +1,13 @@
 from enum import Enum
 
 
+class UserRoles(str, Enum):
+    SUPER_ADMIN = 'super_admin'
+    ADMIN = 'admin'
+    CONCESSION_MANAGER = 'concession_manager'
+    CASHIER = 'cashier'
+    USER = 'user'
+
 class CinemaStatus(str, Enum):
     ACTIVE = "active"
     CLOSED = "closed"

@@ -36,6 +36,7 @@ import SeatMap from "../components/SeatMap";
 import { sessionsAPI } from "../api/sessions";
 import { concessionsAPI } from "../api/concessions";
 import { bookingsAPI } from "../api/bookings";
+import { getFoodCategories } from "../api/foodCategories";
 import { useAuth } from "../context/AuthContext";
 import PromoCodeInput from "../components/PromoCodeInput";
 import AuthModal from "../components/AuthModal";
@@ -103,22 +104,27 @@ const SessionBooking = () => {
             const cinemaId = sessionData?.hall?.cinema?.id;
 
             // Передаём cinema_id в запрос
-            const concessionsData = await concessionsAPI.getConcessionItems({
-                cinema_id: cinemaId,
-            });
+            const [concessionsData, allCategories] = await Promise.all([
+                concessionsAPI.getConcessionItems({
+                    cinema_id: cinemaId,
+                }),
+                // Fetch all categories sorted by display_order to maintain proper ordering
+                getFoodCategories()
+            ]);
+
+            // Sort categories by display_order
+            const sortedCategories = allCategories
+                .filter(category =>
+                    concessionsData.some(item => item.category && item.category.id === category.id)
+                )
+                .sort((a, b) => a.display_order - b.display_order)
+                .map(category => category.name);
 
             setSession(sessionData);
             setSeats(seatsData.seats ?? []);
             setConcessions(concessionsData);
 
-            const categories = [
-                ...new Set(
-                    concessionsData
-                        .map((item) => item.category?.name)
-                        .filter(Boolean)
-                ),
-            ];
-            if (categories.length > 0) setActiveCategory(categories[0]);
+            if (sortedCategories.length > 0) setActiveCategory(sortedCategories[0]);
 
             setError(null);
         } catch (err) {
@@ -437,12 +443,29 @@ const SessionBooking = () => {
                                     />
                                     <Chip
                                         icon={<PlaceIcon />}
-                                        label={`${session?.hall?.cinema?.name}, Зал ${session?.hall?.name}`}
+                                        label={`${session?.hall?.cinema?.name}, Зал ${session?.hall?.hall_number || session?.hall?.name}`}
                                         sx={{
                                             background:
                                                 "rgba(255, 215, 0, 0.2)",
                                         }}
                                     />
+                                    {session?.hall?.capacity && (
+                                        <Chip
+                                            icon={<SeatIcon />}
+                                            label={`Вместимость: ${session?.hall?.capacity}`}
+                                            sx={{
+                                                background: "rgba(70, 211, 105, 0.2)",
+                                            }}
+                                        />
+                                    )}
+                                    {session?.hall?.hall_type && (
+                                        <Chip
+                                            label={session?.hall?.hall_type}
+                                            sx={{
+                                                background: "rgba(33, 150, 243, 0.2)",
+                                            }}
+                                        />
+                                    )}
                                 </Box>
                             </Grid>
                             <Grid
@@ -548,6 +571,7 @@ const SessionBooking = () => {
                                                 border: "1px solid rgba(255, 255, 255, 0.1)",
                                                 position: "relative",
                                                 opacity: isOutOfStock ? 0.5 : 1,
+                                                minHeight: 120,
                                             }}
                                         >
                                             {isOutOfStock && (
@@ -582,7 +606,7 @@ const SessionBooking = () => {
                                                     objectFit: "cover",
                                                 }}
                                                 image={
-                                                    item.image_url ||
+                                                    (item.image_url || "").trim() ||
                                                     "https://via.placeholder.com/100x100/2a2a2a/ffffff?text=Food"
                                                 }
                                                 alt={item.name}

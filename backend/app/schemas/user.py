@@ -30,12 +30,11 @@ class UserLogin(BaseModel):
     password: str
 
 
-# Schema for user update
+# Schema for user update (email and birth_date cannot be changed)
 class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
-    birth_date: Optional[date] = None
     gender: Optional[Gender] = None
     city: Optional[str] = None
     preferred_language: Optional[str] = None
@@ -64,6 +63,7 @@ class UserResponse(BaseModel):
     role_id: Optional[int] = None
     cinema_id: Optional[int] = None
     bonus_balance: Optional[float] = None
+    role: Optional[str] = None
 
 
 # JWT Token response

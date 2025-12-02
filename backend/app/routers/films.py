@@ -1,4 +1,4 @@
-from typing import List, Annotated
+from typing import List, Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
@@ -16,20 +16,41 @@ router = APIRouter()
 
 @router.get("", response_model=FilmsPaginatedResponse)
 async def get_films(
-    genre_id: int | None = Query(None, description="Filter by genre ID"),
-    release_year: int | None = Query(None, description="Filter by release year"),
-    search: str | None = Query(None, description="Search in title and original title"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+        genre_id: int | None = Query(None, description="Filter by genre ID (deprecated for multiple)"),
+        genre_ids_str: Optional[str] = Query(None, alias="genre_ids",description="Filter by multiple genre IDs (comma-separated, OR logic)"),
+        release_year: int | None = Query(None, description="Filter by release year"),
+        search: str | None = Query(None, description="Search in title and original title"),
+        skip: int = Query(0, ge=0),
+        limit: int = Query(20, ge=1, le=100),
+        db: AsyncSession = Depends(get_db)
 ):
     """Get list of films with optional filters and pagination."""
     # Build base query
     base_query = select(Film)
-
+    genre_ids = []
+    if genre_ids_str:
+        try:
+            genre_ids = [int(id_str.strip()) for id_str in genre_ids_str.split(',')]
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid genre_ids format. Expected comma-separated integers."
+            )
+    # Handle single genre ID (backward compatibility)
     if genre_id:
         # Join with film_genres to filter by genre
         base_query = base_query.join(film_genres).filter(film_genres.c.genre_id == genre_id)
+    # Handle multiple genre IDs
+    elif genre_ids:
+        subquery = (
+            select(film_genres.c.film_id)
+            .filter(film_genres.c.genre_id.in_(genre_ids))
+            .group_by(film_genres.c.film_id)
+            .having(func.count(func.distinct(film_genres.c.genre_id)) == len(genre_ids))
+        )
+
+        # Filter films by IDs from subquery
+        base_query = base_query.filter(Film.id.in_(subquery))
 
     if release_year:
         base_query = base_query.filter(Film.release_year == release_year)

@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Annotated
+import pytz
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,9 +10,11 @@ from app.database import get_db
 from app.models.user import User
 from app.models.bonus_account import BonusAccount
 from app.models.enums import UserStatus
-from app.schemas.user import UserCreate, UserLogin, UserResponse, Token
+from app.schemas.user import UserCreate, UserLogin, UserUpdate, UserResponse, Token
 from app.utils.security import verify_password, get_password_hash, create_access_token, create_refresh_token, decode_token
 from app.config import get_settings
+import pytz
+from sqlalchemy.orm import selectinload
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -38,7 +41,8 @@ async def get_current_user(
         raise credentials_exception
 
     # Get user from database
-    result = await db.execute(select(User).filter(User.email == email))
+    query = select(User).options(selectinload(User.role)).filter(User.email == email)
+    result = await db.execute(query)
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -91,7 +95,7 @@ async def register(
         preferred_language=user_data.preferred_language,
         marketing_consent=user_data.marketing_consent,
         data_processing_consent=user_data.data_processing_consent,
-        registration_date=datetime.utcnow(),
+        registration_date=datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None),
         status=UserStatus.ACTIVE
     )
 
@@ -136,7 +140,7 @@ async def login(
         )
 
     # Update last login
-    user.last_login = datetime.utcnow()
+    user.last_login =datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
     await db.commit()
 
     # Create access token
@@ -169,8 +173,59 @@ async def get_me(
     user_dict = current_user.__dict__.copy()
     user_dict['bonus_balance'] = bonus_account.balance if bonus_account else 0.00
 
+    # Get role name from the role relationship
+    if current_user.role:
+        user_dict['role'] = current_user.role.name
+    else:
+        user_dict['role'] = 'user'  # default role
+
     # Convert to UserResponse model
     return UserResponse.model_validate(user_dict)
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_profile(
+    user_update: UserUpdate,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Update current user profile."""
+    # Prevent changing birth date and email
+    update_data = user_update.model_dump(exclude_unset=True)
+
+    # Remove birth_date if it's being attempted to change
+    if 'birth_date' in update_data:
+        del update_data['birth_date']
+
+    # Remove email if it's being attempted to change
+    if 'email' in update_data:
+        del update_data['email']
+
+    # Update only allowed fields
+    for field, value in update_data.items():
+        setattr(current_user, field, value)
+
+    try:
+        await db.commit()
+        await db.refresh(current_user)
+
+        # Get updated bonus account balance
+        bonus_account_result = await db.execute(
+            select(BonusAccount).filter(BonusAccount.user_id == current_user.id)
+        )
+        bonus_account = bonus_account_result.scalar_one_or_none()
+
+        # Create user response with bonus balance
+        user_dict = current_user.__dict__.copy()
+        user_dict['bonus_balance'] = bonus_account.balance if bonus_account else 0.00
+
+        return UserResponse.model_validate(user_dict)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update profile: {str(e)}"
+        )
 
 
 @router.post("/refresh", response_model=Token)

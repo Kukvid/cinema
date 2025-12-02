@@ -15,4 +15,9 @@ export const paymentsAPI = {
     const response = await axios.get(`/payments/${orderId}/details`);
     return response.data;
   },
+
+  getPaymentHistory: async (params = {}) => {
+    const response = await axios.get('/payments/history', { params });
+    return response.data;
+  },
 };

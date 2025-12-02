@@ -66,14 +66,14 @@ const MyOrders = () => {
     const [loadingDetails, setLoadingDetails] = useState(false);
 
     // Для бесконечной прокрутки
-    const activePageRef = useRef(0);
-    const pastPageRef = useRef(0);
+    const activeSkipRef = useRef(0);
+    const pastSkipRef = useRef(0);
     const observer = useRef();
 
-    const LIMIT = 10;
+    const LIMIT = 10; // Увеличил лимит до 20 как запрошено
 
-    const { current: activePage } = activePageRef;
-    const { current: pastPage } = pastPageRef;
+    const { current: activeSkip } = activeSkipRef;
+    const { current: pastSkip } = pastSkipRef;
 
     const formatDate = (dateString) => {
         try {
@@ -93,7 +93,7 @@ const MyOrders = () => {
         );
     };
 
-    const loadOrders = async (page = 0, type = "active", append = false) => {
+    const loadOrders = async (skip = 0, type = "active", append = false) => {
         if (loadingMore && append) return;
 
         try {
@@ -107,17 +107,17 @@ const MyOrders = () => {
                 setLoadingMore(true);
             }
 
-            const response = await bookingsAPI.getMyBookings();
+            const response = await bookingsAPI.getMyBookingsPaginated(skip, LIMIT);
 
             // Filter orders based on status
-            const allOrders = response;
-            const activeOrdersList = allOrders.filter(
+            const orders = response;
+            const activeOrdersList = orders.filter(
                 (order) =>
                     order.status !== "cancelled" &&
                     order.status !== "used" &&
                     !isOrderPast(order)
             );
-            const pastOrdersList = allOrders.filter(
+            const pastOrdersList = orders.filter(
                 (order) =>
                     order.status === "cancelled" ||
                     order.status === "used" ||
@@ -129,15 +129,24 @@ const MyOrders = () => {
                     setActiveOrders((prev) => [...prev, ...activeOrdersList]);
                 } else {
                     setActiveOrders(activeOrdersList);
+                    setActiveCount(activeOrdersList.length);
+
                 }
-                setActiveCount(activeOrdersList.length);
+                // Если получили меньше, чем лимит, значит данных больше нет
+                if (orders.length < LIMIT) {
+                    setHasMore(false);
+                }
             } else {
                 if (append) {
                     setPastOrders((prev) => [...prev, ...pastOrdersList]);
                 } else {
                     setPastOrders(pastOrdersList);
+                    setPastCount(pastOrdersList.length);
                 }
-                setPastCount(pastOrdersList.length);
+                // Если получили меньше, чем лимит, значит данных больше нет
+                if (orders.length < LIMIT) {
+                    setHasMore(false);
+                }
             }
 
             setError(null);
@@ -154,20 +163,20 @@ const MyOrders = () => {
     };
 
     const loadMoreOrders = useCallback(() => {
-        if (loadingMore) return;
+        if (loadingMore || !hasMore) return;
 
         if (tabValue === 0) {
             // Загрузка активных заказов
-            const nextPage = activePage + 1;
-            activePageRef.current = nextPage;
-            loadOrders(nextPage, "active", true);
+            const nextSkip = activeSkip + LIMIT;
+            activeSkipRef.current = nextSkip;
+            loadOrders(nextSkip, "active", true);
         } else {
             // Загрузка прошедших заказов
-            const nextPage = pastPage + 1;
-            pastPageRef.current = nextPage;
-            loadOrders(nextPage, "past", true);
+            const nextSkip = pastSkip + LIMIT;
+            pastSkipRef.current = nextSkip;
+            loadOrders(nextSkip, "past", true);
         }
-    }, [tabValue, loadingMore, activePage, pastPage]);
+    }, [tabValue, loadingMore, hasMore, activeSkip, pastSkip]);
 
     // Наблюдатель для бесконечной прокрутки
     const lastOrderElementRef = useCallback(
@@ -186,23 +195,37 @@ const MyOrders = () => {
         [loadMoreOrders]
     );
 
-    // Добавьте ЭТОТ useEffect для первоначальной загрузки ОБОИХ списков
+    // Добавьте ЭТОТ useEffect для первоначальной загрузки только активных заказов
     useEffect(() => {
-        // Загружаем и активные, и прошедшие заказы при монтировании компонента
+        // Загружаем активные заказы при монтировании компонента
         loadOrders(0, "active", false);
-        loadOrders(0, "past", false);
+         loadOrders(0, "past", false);
     }, []); // Пустой массив = выполнится только один раз при монтировании
 
     useEffect(() => {
-        // Сбрасываем страницы при смене вкладки и загружаем заказы
+        // Сбрасываем пропуски при смене вкладки и загружаем заказы
         if (tabValue === 0) {
-            activePageRef.current = 0;
-            setActiveOrders([]);
-            loadOrders(0, "active", false);
+            if (activeOrders.length === 0) {
+                // Если активные заказы еще не были загружены, загрузим их
+                activeSkipRef.current = 0;
+                setActiveOrders([]);
+                setHasMore(true); // Сбрасываем флаг, чтобы можно было загружать больше
+                loadOrders(0, "active", false);
+            } else {
+                // Если уже загружены, обновляем только пропуск
+                activeSkipRef.current = 0;
+            }
         } else {
-            pastPageRef.current = 0;
-            setPastOrders([]);
-            loadOrders(0, "past", false);
+            if (pastOrders.length === 0) {
+                // Если прошедшие заказы еще не были загружены, загрузим их
+                pastSkipRef.current = 0;
+                setPastOrders([]);
+                setHasMore(true); // Сбрасываем флаг, чтобы можно было загружать больше
+                loadOrders(0, "past", false);
+            } else {
+                // Если уже загружены, обновляем только пропуск
+                pastSkipRef.current = 0;
+            }
         }
     }, [tabValue]);
 
@@ -250,6 +273,23 @@ const MyOrders = () => {
                 return "#666";
             default:
                 return "#999";
+        }
+    };
+
+    const getStatusText = (status) => {
+        switch (status) {
+            case 'paid':
+                return 'Оплачен';
+            case 'pending_payment':
+                return 'Ожидает оплаты';
+            case 'cancelled':
+                return 'Отменён';
+            case 'used':
+                return 'Использован';
+            case 'completed':
+                return 'Завершён';
+            default:
+                return status;
         }
     };
 
@@ -348,6 +388,7 @@ const MyOrders = () => {
                                         onClick={() => handleOrderClick(order)}
                                         formatDate={formatDate}
                                         getStatusColor={getStatusColor}
+                                        getStatusText={getStatusText} 
                                         onPay={handlePayForOrder}
                                     />
                                 </Grid>
@@ -364,6 +405,7 @@ const MyOrders = () => {
                                     onClick={() => handleOrderClick(order)}
                                     formatDate={formatDate}
                                     getStatusColor={getStatusColor}
+                                    getStatusText={getStatusText}
                                     onPay={handlePayForOrder}
                                 />
                             </Grid>
@@ -432,7 +474,7 @@ const MyOrders = () => {
     );
 };
 
-const OrderCard = ({ order, onClick, formatDate, getStatusColor, onPay }) => {
+const OrderCard = ({ order, onClick, formatDate, getStatusColor, getStatusText, onPay }) => {
     const isPast = order.status === "cancelled" || order.status === "used";
 
     return (
@@ -479,10 +521,7 @@ const OrderCard = ({ order, onClick, formatDate, getStatusColor, onPay }) => {
                                     Заказ #{order.order_number}
                                 </Typography>
                                 <Chip
-                                    label={
-                                        order.status.charAt(0).toUpperCase() +
-                                        order.status.slice(1)
-                                    }
+                                    label={getStatusText(order.status)} 
                                     size="small"
                                     sx={{
                                         mt: 0.5,
@@ -530,37 +569,6 @@ const OrderCard = ({ order, onClick, formatDate, getStatusColor, onPay }) => {
                                     sx={{ fontWeight: 600, ml: 3.5 }}
                                 >
                                     {formatDate(order.created_at)}
-                                </Typography>
-                            </Grid>
-
-                            <Grid
-                                item
-                                xs={12}
-                                sm={6}
-                            >
-                                <Box
-                                    sx={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 1,
-                                        mb: 1,
-                                    }}
-                                >
-                                    <PaymentIcon
-                                        sx={{ color: "#2196f3", fontSize: 20 }}
-                                    />
-                                    <Typography
-                                        variant="body2"
-                                        color="text.secondary"
-                                    >
-                                        Статус
-                                    </Typography>
-                                </Box>
-                                <Typography
-                                    variant="body1"
-                                    sx={{ fontWeight: 600, ml: 3.5 }}
-                                >
-                                    {order.status}
                                 </Typography>
                             </Grid>
 
@@ -753,6 +761,23 @@ const OrderDetailsModal = ({
         }
     };
 
+    const getStatusText = (status) => {
+        switch (status) {
+            case 'paid':
+                return 'Оплачен';
+            case 'pending_payment':
+                return 'Ожидает оплаты';
+            case 'cancelled':
+                return 'Отменён';
+            case 'used':
+                return 'Использован';
+            case 'completed':
+                return 'Завершён';
+            default:
+                return status;
+        }
+    };
+
     if (loading) {
         return (
             <Dialog
@@ -810,7 +835,7 @@ const OrderDetailsModal = ({
                                 xs={12}
                             >
                                 <Paper
-                                    sx={{ p: 2, mb: 2, background: "#f5f5f5" }}
+                                    sx={{ p: 2, mb: 2}}
                                 >
                                     <Typography
                                         variant="h6"

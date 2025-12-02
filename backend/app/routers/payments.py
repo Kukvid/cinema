@@ -1,7 +1,8 @@
+from typing import Annotated, List
 from datetime import datetime
-from typing import Annotated
 from decimal import Decimal
 import secrets
+import pytz
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -19,7 +20,7 @@ from app.models.enums import (
     OrderStatus, PaymentStatus, PaymentMethod,
     TicketStatus, BonusTransactionType
 )
-from app.schemas.order import PaymentCreate, PaymentResponse
+from app.schemas.order import PaymentCreate, PaymentResponse, PaymentResponsePublic
 from app.routers.auth import get_current_active_user
 from app.utils.qr_generator import generate_qr_code
 
@@ -98,12 +99,14 @@ async def process_payment(
         )
 
     # Mock payment processing
-    transaction_id = f"TXN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(4).upper()}"
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    payment_time = datetime.now(moscow_tz).replace(tzinfo=None)
+    transaction_id = f"TXN-{payment_time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(4).upper()}"
 
     # Create payment record
     new_payment = Payment(
         order_id=order.id,
-        payment_date=datetime.utcnow(),
+        payment_date=payment_time,
         amount=payment_data.amount,
         payment_method=PaymentMethod(payment_data.payment_method),
         transaction_id=transaction_id,
@@ -152,7 +155,7 @@ async def process_payment(
                 bonus_deduction_transaction = BonusTransaction(
                     bonus_account_id=bonus_account.id,
                     order_id=order.id,
-                    transaction_date=datetime.utcnow(),
+                    transaction_date=payment_time,
                     amount=-float(bonus_deduction),  # Negative amount for deduction
                     transaction_type=BonusTransactionType.DEDUCTION,
                     description="Списание бонусов за заказ"
@@ -175,7 +178,7 @@ async def process_payment(
                 bonus_transaction = BonusTransaction(
                     bonus_account_id=bonus_account.id,
                     order_id=order.id,  # Link to the order for which bonus is accrued
-                    transaction_date=datetime.utcnow(),
+                    transaction_date=payment_time,
                     amount=bonus_points,
                     transaction_type=BonusTransactionType.ACCRUAL
                 )
@@ -185,7 +188,7 @@ async def process_payment(
                 bonus_transaction = BonusTransaction(
                     bonus_account_id=bonus_account.id,
                     order_id=order.id,
-                    transaction_date=datetime.utcnow(),
+                    transaction_date=payment_time,
                     amount=bonus_points,
                     transaction_type=BonusTransactionType.ACCRUAL
                 )
@@ -340,3 +343,25 @@ async def get_payment_details(
             for preorder in preorders
         ]
     }
+
+
+@router.get("/history", response_model=List[PaymentResponsePublic])
+async def get_payment_history(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    skip: int = 0,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get payment history for current user."""
+    statement = (
+        select(Payment)
+        .join(Order)
+        .filter(Order.user_id == current_user.id)
+        .order_by(Payment.payment_date.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(statement)
+    payments = result.scalars().all()
+
+    return [PaymentResponsePublic.model_validate(payment) for payment in payments]

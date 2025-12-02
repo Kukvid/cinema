@@ -9,17 +9,41 @@ import {
   Rating,
   Alert,
   Divider,
+  Stack,
+  Avatar,
 } from '@mui/material';
 import {
-  Star as StarIcon,
   AccessTime as TimeIcon,
-  Category as CategoryIcon,
+  Public as GlobeIcon,
+  CalendarToday as CalendarIcon,
+  MovieCreation as DirectorIcon,
+  Groups as ActorsIcon,
+  Star as StarIcon,
+  Hd as HdIcon,
 } from '@mui/icons-material';
 import { useParams } from 'react-router-dom';
 import Loading from '../components/Loading';
 import SessionList from '../components/SessionList';
 import { filmsAPI } from '../api/films';
 import { sessionsAPI } from '../api/sessions';
+
+// Вспомогательный компонент для строки информации
+const InfoRow = ({ icon, label, value }) => {
+  if (!value) return null;
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+      <Box sx={{ color: 'rgba(229, 9, 20, 0.8)', mt: 0.5 }}>{icon}</Box>
+      <Box>
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+          {label}
+        </Typography>
+        <Typography variant="body1" color="text.primary">
+          {value}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
 
 const FilmDetail = () => {
   const { id } = useParams();
@@ -62,151 +86,176 @@ const FilmDetail = () => {
     );
   }
 
-  return (
-    <Box sx={{ minHeight: '100vh', pb: 8 }}>
-      {/* Hero Section с постером */}
-      <Box
-        sx={{
-          position: 'relative',
-          height: { xs: '300px', md: '500px' },
-          overflow: 'hidden',
-          mb: 4,
-          '&::before': {
-            content: '""',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: `linear-gradient(180deg, transparent 0%, #141414 100%)`,
-            zIndex: 1,
-          },
-        }}
-      >
-        <Box
-          component="img"
-          src={film.poster_url || 'https://via.placeholder.com/1920x1080/1f1f1f/ffffff?text=No+Image'}
-          alt={film.title}
+  // Обработка жанров (если массив объектов или строка)
+  const renderGenres = () => {
+    if (Array.isArray(film.genres)) {
+      return film.genres.map((g) => (
+        <Chip
+          key={g.id || g.name}
+          label={g.name}
+          variant="outlined"
           sx={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            filter: 'blur(8px) brightness(0.4)',
+            color: '#e0e0e0',
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            '&:hover': { borderColor: '#e50914', bgcolor: 'rgba(229, 9, 20, 0.1)' }
           }}
         />
-      </Box>
+      ));
+    }
+    return film.genre ? <Chip label={film.genre} variant="outlined" sx={{ color: '#e0e0e0' }} /> : null;
+  };
 
-      <Container maxWidth="xl" sx={{ mt: -25, position: 'relative', zIndex: 2 }}>
-        <Grid container spacing={4}>
-          {/* Постер */}
+  return (
+    <Box sx={{ minHeight: '100vh', pb: 8, bgcolor: '#141414', color: '#fff' }}>
+      {/* Hero Background */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '70vh',
+          backgroundImage: `url(${film.poster_url})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center top',
+          filter: 'blur(60px) brightness(0.3)',
+          zIndex: 0,
+          maskImage: 'linear-gradient(to bottom, black 0%, transparent 100%)',
+        }}
+      />
+
+      <Container maxWidth="xl" sx={{ position: 'relative', zIndex: 2, pt: { xs: 4, md: 8 } }}>
+        <Grid container spacing={6}>
+          {/* Левая колонка: Постер */}
           <Grid item xs={12} md={4} lg={3}>
             <Paper
-              elevation={8}
+              elevation={24}
               sx={{
-                borderRadius: 3,
+                borderRadius: 4,
                 overflow: 'hidden',
-                border: '2px solid rgba(229, 9, 20, 0.3)',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: '0 0 40px rgba(229, 9, 20, 0.15)',
+                position: 'sticky',
+                top: 20,
               }}
             >
               <Box
                 component="img"
-                src={film.poster_url || 'https://via.placeholder.com/400x600/1f1f1f/ffffff?text=No+Poster'}
+                src={film.poster_url}
                 alt={film.title}
-                sx={{
-                  width: '100%',
-                  display: 'block',
-                }}
+                sx={{ width: '100%', display: 'block', aspectRatio: '2/3', objectFit: 'cover' }}
               />
             </Paper>
           </Grid>
 
-          {/* Информация о фильме */}
+          {/* Правая колонка: Информация */}
           <Grid item xs={12} md={8} lg={9}>
-            <Paper
-              sx={{
-                p: 4,
-                background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)',
-                border: '1px solid rgba(229, 9, 20, 0.2)',
-                borderRadius: 3,
-              }}
-            >
-              <Typography
-                variant="h3"
-                sx={{
-                  fontWeight: 700,
-                  mb: 2,
-                  background: 'linear-gradient(135deg, #e50914 0%, #ffd700 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
-              >
-                {film.title}
+            <Box sx={{ mb: 4 }}>
+              {/* Заголовок и оригинальное название */}
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1 }}>
+                <Typography variant="h2" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
+                  {film.title}
+                </Typography>
+                {film.age_rating && (
+                  <Chip
+                    label={film.age_rating}
+                    sx={{
+                      fontWeight: 900,
+                      bgcolor: 'rgba(255,255,255,0.1)',
+                      color: '#e50914',
+                      border: '1px solid #e50914',
+                      height: 32
+                    }}
+                  />
+                )}
+              </Stack>
+              
+              <Typography variant="h5" sx={{ color: 'text.secondary', fontWeight: 300, mb: 3, fontStyle: 'italic' }}>
+                {film.original_title}
               </Typography>
 
-              {/* Рейтинг и жанр */}
-              <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+              {/* Блок с рейтингами */}
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} sx={{ mb: 4, alignItems: { sm: 'center' } }}>
+                {/* Внутренний рейтинг */}
                 {film.rating && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Rating
-                      value={film.rating / 2}
-                      precision={0.1}
-                      readOnly
-                      icon={<StarIcon sx={{ color: '#ffd700' }} fontSize="large" />}
-                      emptyIcon={<StarIcon sx={{ color: '#404040' }} fontSize="large" />}
-                    />
-                    <Typography variant="h6" sx={{ color: '#ffd700', fontWeight: 700 }}>
-                      {film.rating?.toFixed(1)}
-                    </Typography>
-                  </Box>
+                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                     <Rating 
+                       value={film.rating / 2} 
+                       precision={0.1} 
+                       readOnly 
+                       icon={<StarIcon sx={{ color: '#e50914' }} />}
+                       emptyIcon={<StarIcon sx={{ color: '#404040' }} />}
+                     />
+                     <Typography variant="h6" sx={{ fontWeight: 700 }}>{film.rating}</Typography>
+                   </Box>
                 )}
+                
+                <Divider orientation="vertical" flexItem sx={{ bgcolor: 'rgba(255,255,255,0.1)', display: { xs: 'none', sm: 'block' } }} />
+                
+                {/* Внешние рейтинги */}
+                <Stack direction="row" spacing={2}>
+                  {film.imdb_rating && (
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="caption" sx={{ color: '#f5c518', fontWeight: 900, display: 'block' }}>IMDb</Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 600 }}>{film.imdb_rating}</Typography>
+                    </Box>
+                  )}
+                  {film.kinopoisk_rating && (
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="caption" sx={{ color: '#ff6600', fontWeight: 900, display: 'block' }}>Кинопоиск</Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 600 }}>{film.kinopoisk_rating}</Typography>
+                    </Box>
+                  )}
+                </Stack>
+              </Stack>
 
-                {film.genre && (
-                  <Chip
-                    icon={<CategoryIcon />}
-                    label={film.genre}
-                    sx={{
-                      background: 'linear-gradient(135deg, rgba(229, 9, 20, 0.3) 0%, rgba(176, 7, 16, 0.3) 100%)',
-                      border: '1px solid rgba(229, 9, 20, 0.5)',
-                      fontWeight: 600,
-                      fontSize: '1rem',
-                      px: 2,
-                      py: 2.5,
-                    }}
-                  />
-                )}
-
-                {film.duration && (
-                  <Chip
-                    icon={<TimeIcon />}
-                    label={`${film.duration} мин`}
-                    sx={{
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      fontWeight: 600,
-                      fontSize: '1rem',
-                      px: 2,
-                      py: 2.5,
-                    }}
-                  />
-                )}
+              {/* Жанры */}
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 4 }}>
+                {renderGenres()}
               </Box>
 
-              <Divider sx={{ my: 3, borderColor: 'rgba(229, 9, 20, 0.2)' }} />
+              {/* Основное описание */}
+              <Typography variant="body1" sx={{ fontSize: '1.1rem', lineHeight: 1.8, color: '#d1d1d1', mb: 5 }}>
+                {film.description}
+              </Typography>
 
-              {/* Описание */}
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                Описание
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 3, lineHeight: 1.8 }}>
-                {film.description || 'Описание отсутствует'}
-              </Typography>
+              {/* Детальная информация (Grid) */}
+              <Grid container spacing={4} sx={{ mb: 5 }}>
+                <Grid item xs={12} sm={6}>
+                  <InfoRow 
+                    icon={<DirectorIcon />} 
+                    label="Режиссер" 
+                    value={film.director} 
+                  />
+                  <InfoRow 
+                    icon={<GlobeIcon />} 
+                    label="Страна" 
+                    value={film.country} 
+                  />
+                   <InfoRow 
+                    icon={<CalendarIcon />} 
+                    label="Год выпуска" 
+                    value={film.release_year} 
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                   <InfoRow 
+                    icon={<ActorsIcon />} 
+                    label="В главных ролях" 
+                    value={film.actors} 
+                  />
+                  <InfoRow 
+                    icon={<TimeIcon />} 
+                    label="Продолжительность" 
+                    value={film.duration_minutes ? `${film.duration_minutes} мин.` : null} 
+                  />
+                </Grid>
+              </Grid>
 
               {/* Трейлер */}
               {film.trailer_url && (
-                <>
-                  <Divider sx={{ my: 3, borderColor: 'rgba(229, 9, 20, 0.2)' }} />
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+                <Box sx={{ mb: 6 }}>
+                   <Typography variant="h5" sx={{ mb: 2, fontWeight: 700, borderLeft: '4px solid #e50914', pl: 2 }}>
                     Трейлер
                   </Typography>
                   <Box
@@ -215,65 +264,37 @@ const FilmDetail = () => {
                       paddingBottom: '56.25%',
                       height: 0,
                       overflow: 'hidden',
-                      borderRadius: 2,
-                      border: '2px solid rgba(229, 9, 20, 0.3)',
+                      borderRadius: 3,
+                      bgcolor: '#000',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
                     }}
                   >
                     <iframe
                       src={film.trailer_url}
-                      title="Трейлер"
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        border: 0,
-                      }}
+                      title="Trailer"
+                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
                       allowFullScreen
                     />
                   </Box>
-                </>
+                </Box>
               )}
-            </Paper>
+
+              {/* Расписание */}
+              <Box>
+                <Typography variant="h5" sx={{ mb: 3, fontWeight: 700, borderLeft: '4px solid #e50914', pl: 2 }}>
+                  Расписание сеансов
+                </Typography>
+                {sessions.length > 0 ? (
+                  <SessionList sessions={sessions} />
+                ) : (
+                  <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'rgba(255,255,255,0.05)', borderRadius: 2 }}>
+                    <Typography color="text.secondary">На данный момент сеансов нет</Typography>
+                  </Paper>
+                )}
+              </Box>
+            </Box>
           </Grid>
         </Grid>
-
-        {/* Расписание сеансов */}
-        <Box sx={{ mt: 6 }}>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 700,
-              mb: 3,
-              background: 'linear-gradient(135deg, #e50914 0%, #ffd700 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-            }}
-          >
-            Расписание сеансов
-          </Typography>
-
-          {sessions.length > 0 ? (
-            <SessionList sessions={sessions} />
-          ) : (
-            <Paper
-              sx={{
-                p: 4,
-                textAlign: 'center',
-                background: 'rgba(31, 31, 31, 0.5)',
-                border: '1px solid rgba(229, 9, 20, 0.2)',
-              }}
-            >
-              <Typography variant="h6" color="text.secondary">
-                Сеансы пока не запланированы
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Проверьте позже
-              </Typography>
-            </Paper>
-          )}
-        </Box>
       </Container>
     </Box>
   );

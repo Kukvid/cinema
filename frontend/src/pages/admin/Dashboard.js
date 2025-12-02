@@ -24,6 +24,9 @@ import {
   People as PeopleIcon,
   AttachMoney as MoneyIcon,
   LocalOffer as PromoIcon,
+  Person as PersonIcon,
+  Assignment as AssignmentIcon,
+  Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -63,6 +66,12 @@ const Dashboard = () => {
 
   const menuItems = [
     {
+      title: 'Управление пользователями',
+      icon: <PeopleIcon />,
+      path: '/admin/users',
+      description: 'Управление учетными записями пользователей',
+    },
+    {
       title: 'Управление кинотеатрами',
       icon: <PlaceIcon />,
       path: '/admin/cinemas',
@@ -75,10 +84,40 @@ const Dashboard = () => {
       description: 'Каталог фильмов, постеры, описания',
     },
     {
+      title: 'Управление жанрами',
+      icon: <CategoryIcon />,
+      path: '/admin/genres',
+      description: 'Управление жанрами фильмов',
+    },
+    {
       title: 'Управление сеансами',
       icon: <EventIcon />,
       path: '/admin/sessions',
       description: 'Расписание показов, цены, залы',
+    },
+    {
+      title: 'Управление залами',
+      icon: <PlaceIcon />,
+      path: '/admin/halls',
+      description: 'Настройка залов и вместимости',
+    },
+    {
+      title: 'Управление местами',
+      icon: <EventIcon />,
+      path: '/admin/seats',
+      description: 'Конфигурация мест в залах',
+    },
+    {
+      title: 'Управление дистрибьюторами',
+      icon: <PersonIcon />,
+      path: '/admin/distributors',
+      description: 'Управление контрактами с дистрибьюторами',
+    },
+    {
+      title: 'Управление договорами',
+      icon: <AssignmentIcon />,
+      path: '/admin/contracts',
+      description: 'Управление договорами с дистрибьюторами',
     },
     {
       title: 'Кинобар',
@@ -91,6 +130,12 @@ const Dashboard = () => {
       icon: <CategoryIcon />,
       path: '/admin/food-categories',
       description: 'Управление категориями товаров',
+    },
+    {
+      title: 'Отчеты',
+      icon: <AssessmentIcon />,
+      path: '/admin/reports',
+      description: 'Формирование и анализ отчетов',
     },
     {
       title: 'Промокоды',

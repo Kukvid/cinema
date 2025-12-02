@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
+import pytz
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, update
+from sqlalchemy import select, update, and_
 from sqlalchemy.sql import func
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -16,6 +17,9 @@ from app.database import engine, get_db
 from app.models.bonus_account import BonusAccount
 from app.models.bonus_transaction import BonusTransaction
 from app.models.enums import BonusTransactionType
+from app.models.session import Session
+from app.models.enums import SessionStatus
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +33,13 @@ class OrderCleanupService:
     async def cancel_expired_orders(self):
         """Cancel orders that have exceeded payment timeout and return tickets/concessions to stock"""
         logger.info("Running expired order cleanup task...")
-        
+
+        # Create a new database session for the background task
         async with self.SessionLocal() as db:
             try:
                 # Find orders that are pending payment and have exceeded expiration time
-                current_time = datetime.utcnow()
-                
+                current_time =datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+
                 expired_orders_result = await db.execute(
                     select(Order).filter(
                         Order.status.in_([OrderStatus.CREATED, OrderStatus.PENDING_PAYMENT]),
@@ -42,21 +47,21 @@ class OrderCleanupService:
                     )
                 )
                 expired_orders = expired_orders_result.scalars().all()
-                
+
                 for order in expired_orders:
                     logger.info(f"Cancelling expired order: {order.id}")
-                    
+
                     # Update order status to cancelled
                     order.status = OrderStatus.CANCELLED
                     await db.commit()
                     
-                    # Update tickets status to expired
+                    # Update tickets status to cancelled
                     await db.execute(
                         update(Ticket)
                         .where(Ticket.order_id == order.id)
-                        .values(status=TicketStatus.EXPIRED)
+                        .values(status=TicketStatus.CANCELLED)
                     )
-                    
+
                     # Update concession preorders to cancelled
                     await db.execute(
                         update(ConcessionPreorder)
@@ -65,7 +70,6 @@ class OrderCleanupService:
                     )
 
                     # Return concession items to stock/inventory by incrementing stock quantity
-                    # This is done by updating the concession items to increase their stock quantity
                     from app.models.concession_item import ConcessionItem
                     preorder_items = await db.execute(
                         select(ConcessionPreorder)
@@ -80,17 +84,9 @@ class OrderCleanupService:
                             .where(ConcessionItem.id == preorder.concession_item_id)
                             .values(stock_quantity=ConcessionItem.stock_quantity + preorder.quantity)
                         )
-                    
-                    # If the order used bonus points, return them to user's bonus account
-                    # This is done when payment happens, but we need to account for any bonus-related adjustments
-                    # When order is cancelled it means payment never happened, so if we had processed bonus deductions,
-                    # they should be returned. However, in our current system we don't deduct bonuses until payment.
-                    # In case payment was made but not confirmed, we might need to return bonuses.
-                    # For now, we'll check if there were any bonus transactions for this order and handle accordingly.
 
+                    # If the order used bonus points, return them to user's bonus account
                     # Find bonus transactions related to this order and reverse them
-                    # This includes both deductions and accural transactions
-                    from sqlalchemy import and_
                     bonus_transactions_result = await db.execute(
                         select(BonusTransaction).filter(
                             and_(
@@ -110,30 +106,76 @@ class OrderCleanupService:
 
                         if bonus_account:
                             # Return the deducted amount to the user's bonus account
-                            bonus_account.balance += abs(bonus_tx.amount)  # Using abs() to ensure positive value
+                            bonus_account.balance += abs(bonus_tx.amount)
 
                             # Create a reversal transaction record
                             reversal_transaction = BonusTransaction(
                                 bonus_account_id=bonus_account.id,
                                 order_id=order.id,  # Link to the order that is being cancelled
-                                transaction_date=datetime.utcnow(),
+                                transaction_date=current_time,  # Use Moscow time for consistency
                                 amount=abs(bonus_tx.amount),  # Positive amount for reversal
                                 transaction_type=BonusTransactionType.ACCRUAL,
                                 description="Возврат бонусов: отмена заказа"
                             )
                             db.add(reversal_transaction)
-                    
+
                     await db.commit()
                     logger.info(f"Order {order.id} cancelled successfully")
-                
+
                 await db.commit()
-                    
+
             except Exception as e:
                 logger.error(f"Error in cancel_expired_orders task: {str(e)}")
                 await db.rollback()
-                
+
+    async def update_session_statuses(self):
+        """Update session statuses based on current time - start time and end time"""
+        logger.info("Running session status update task...")
+
+        async with self.SessionLocal() as db:
+            try:
+                current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+
+                # Update sessions that have started but are still marked as scheduled
+                started_result = await db.execute(
+                    update(Session)
+                    .where(
+                        and_(
+                            Session.status == SessionStatus.SCHEDULED,
+                            Session.start_datetime <= current_time
+                        )
+                    )
+                    .values(status=SessionStatus.IN_PROGRESS)
+                )
+                started_count = started_result.rowcount
+
+                # Update sessions that have ended but are still not completed
+                ended_result = await db.execute(
+                    update(Session)
+                    .where(
+                        and_(
+                            Session.status != SessionStatus.CANCELLED,
+                            Session.status != SessionStatus.COMPLETED,
+                            Session.end_datetime < current_time
+                        )
+                    )
+                    .values(status=SessionStatus.COMPLETED)
+                )
+                ended_count = ended_result.rowcount
+
+                await db.commit()
+
+                if started_count > 0 or ended_count > 0:
+                    logger.info(f"Updated {started_count} sessions to IN_PROGRESS and {ended_count} sessions to COMPLETED")
+                else:
+                    logger.info("No session status updates needed")
+
+            except Exception as e:
+                logger.error(f"Error in update_session_statuses task: {str(e)}")
+                await db.rollback()
+
     def start_scheduler(self):
-        """Start the scheduler with the cleanup task"""
+        """Start the scheduler with all cleanup tasks"""
         self.scheduler.add_job(
             self.cancel_expired_orders,
             trigger=IntervalTrigger(seconds=30),  # Run every 30 seconds to check for expired orders
@@ -141,9 +183,18 @@ class OrderCleanupService:
             name='Cancel expired orders',
             replace_existing=True
         )
-        
+
+        # Add the session status update job that runs every minute
+        self.scheduler.add_job(
+            self.update_session_statuses,
+            trigger=IntervalTrigger(minutes=1),  # Run every minute to update session statuses
+            id='update_session_statuses',
+            name='Update session statuses based on time',
+            replace_existing=True
+        )
+
         self.scheduler.start()
-        logger.info("Scheduler started for order cleanup")
+        logger.info("Scheduler started for all tasks")
 
     def stop_scheduler(self):
         """Stop the scheduler"""

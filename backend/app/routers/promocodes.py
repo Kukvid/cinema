@@ -80,7 +80,7 @@ async def get_promocodes(
 
     # Apply valid_today filter
     if valid_today:
-        today = datetime.utcnow().date()
+        today =datetime.now(pytz.timezone('Europe/Moscow')).date()
         query = query.filter(
             and_(
                 Promocode.status == PromocodeStatus.ACTIVE,

@@ -7,7 +7,8 @@ from . import (
     bookings,
     concessions,
     distributors,
-    contracts
+    contracts,
+    payments
 )
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "bookings",
     "concessions",
     "distributors",
-    "contracts"
+    "contracts",
+    "payments"
 ]

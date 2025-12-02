@@ -40,6 +40,7 @@ const Profile = () => {
       first_name: user?.first_name || '',
       last_name: user?.last_name || '',
       phone: user?.phone || '',
+      city: user?.city || '',
     },
   });
 
@@ -69,6 +70,7 @@ const Profile = () => {
       first_name: user?.first_name || '',
       last_name: user?.last_name || '',
       phone: user?.phone || '',
+      city: user?.city || '',
     });
     setEditing(false);
     setError('');
@@ -216,7 +218,20 @@ const Profile = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Телефон"
+                    {...register('phone', {
+                      required: 'Телефон обязателен',
+                    })}
+                    error={!!errors.phone}
+                    helperText={errors.phone?.message}
+                    disabled={!editing}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
                     label="Email"
@@ -226,15 +241,31 @@ const Profile = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
-                    label="Телефон"
-                    {...register('phone', {
-                      required: 'Телефон обязателен',
-                    })}
-                    error={!!errors.phone}
-                    helperText={errors.phone?.message}
+                    label="Дата рождения"
+                    value={user?.birth_date ? new Date(user.birth_date).toLocaleDateString('ru-RU') : ''}
+                    disabled
+                    helperText="Дата рождения не может быть изменена"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Пол"
+                    value={user?.gender || ''}
+                    disabled
+                    helperText="Пол не может быть изменен"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Город"
+                    {...register('city')}
                     disabled={!editing}
                   />
                 </Grid>

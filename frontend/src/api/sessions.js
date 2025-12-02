@@ -1,8 +1,8 @@
 import axios from './axios';
 
 export const sessionsAPI = {
-  getSessions: async (params = {}) => {
-    const response = await axios.get('/sessions', { params });
+  getSessions: async () => {
+    const response = await axios.get('/sessions');
     return response.data;
   },
 

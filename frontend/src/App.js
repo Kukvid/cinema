@@ -29,6 +29,15 @@ import FilmsManage from './pages/admin/FilmsManage';
 import SessionsManage from './pages/admin/SessionsManage';
 import FoodCategoriesManage from './pages/admin/FoodCategoriesManage';
 import PromocodesManage from './pages/admin/PromocodesManage';
+import UserManagement from './pages/admin/UserManagement';
+import GenreManagement from './pages/admin/GenreManagement';
+import DistributorManagement from './pages/admin/DistributorManagement';
+import ContractManagement from './pages/admin/ContractManagement';
+import HallManagement from './pages/admin/HallManagement';
+import SeatManagement from './pages/admin/SeatManagement';
+import SessionManagement from './pages/admin/SessionManagement';
+import ReportManagement from './pages/admin/ReportManagement';
+import ConcessionManagement from './pages/admin/ConcessionManagement';
 
 function App() {
   return (
@@ -97,10 +106,82 @@ function App() {
                 }
               />
               <Route
+                path="/admin/users"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <UserManagement />
+                  </PrivateRoute>
+                }
+              />
+              <Route
                 path="/admin/cinemas"
                 element={
                   <PrivateRoute requireAdmin>
                     <CinemasManage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/genres"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <GenreManagement />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/distributors"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <DistributorManagement />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/contracts"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <ContractManagement />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/halls"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <HallManagement />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/seats"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <SeatManagement />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/sessions"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <SessionManagement />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/reports"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <ReportManagement />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/session-management"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <SessionManagement />
                   </PrivateRoute>
                 }
               />
@@ -133,6 +214,14 @@ function App() {
                 element={
                   <PrivateRoute requireAdmin>
                     <PromocodesManage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/concessions"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <ConcessionManagement />
                   </PrivateRoute>
                 }
               />

@@ -27,6 +27,7 @@ from app.schemas.ticket import TicketResponse
 from app.routers.auth import get_current_active_user
 from app.utils.qr_generator import generate_qr_code
 from app.services.promocode_service import validate_promocode, increment_usage
+import pytz
 import secrets
 
 router = APIRouter()
@@ -172,8 +173,10 @@ async def create_booking(
 
     # Create order
     from datetime import timedelta
-    order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{secrets.token_hex(4).upper()}"
-    created_time = datetime.utcnow()
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    current_time = datetime.now(moscow_tz).replace(tzinfo=None)
+    order_number = f"ORD-{current_time.strftime('%Y%m%d')}-{secrets.token_hex(4).upper()}"
+    created_time = current_time
     settings = get_settings()
     expiry_time = created_time + timedelta(minutes=settings.ORDER_PAYMENT_TIMEOUT_MINUTES)
 
@@ -201,7 +204,7 @@ async def create_booking(
             buyer_id=current_user.id,
             order_id=new_order.id,
             price=ticket_data["price"],
-            purchase_date=datetime.utcnow(),
+            purchase_date=current_time,
             sales_channel=ticket_data["sales_channel"],
             status=TicketStatus.RESERVED
         )
@@ -221,6 +224,7 @@ async def create_booking(
         promocode_id=new_order.promocode_id,
         order_number=new_order.order_number,
         created_at=new_order.created_at,
+        expires_at=new_order.expires_at,
         total_amount=new_order.total_amount,
         discount_amount=new_order.discount_amount,
         final_amount=new_order.final_amount,
@@ -236,9 +240,112 @@ async def get_my_bookings(
     db: AsyncSession = Depends(get_db)
 ):
     """Get all bookings for current user."""
+    # This endpoint returns all bookings - keeping for compatibility
+    # For paginated version, see get_my_bookings_paginated
     result = await db.execute(
         select(Order)
         .filter(Order.user_id == current_user.id)
+        .order_by(Order.created_at.desc())
+    )
+    orders = result.scalars().all()
+
+    # Get tickets, payment and concession preorders for each order
+    orders_with_details = []
+    for order in orders:
+        # Get tickets
+        result = await db.execute(
+            select(Ticket).filter(Ticket.order_id == order.id)
+        )
+        tickets = result.scalars().all()
+
+        # Get payment
+        result = await db.execute(
+            select(Payment).filter(Payment.order_id == order.id)
+        )
+        payment = result.scalar_one_or_none()
+
+        # Get concession preorders
+        result = await db.execute(
+            select(ConcessionPreorder)
+            .options(selectinload(ConcessionPreorder.concession_item))
+            .filter(ConcessionPreorder.order_id == order.id)
+        )
+        concession_preorders = result.scalars().all()
+
+        # Create payment response if payment exists
+        payment_response = None
+        if payment:
+            payment_response = PaymentResponsePublic(
+                id=payment.id,
+                order_id=payment.order_id,
+                status=payment.status.value,
+                payment_method=payment.payment_method.value,
+                transaction_id=payment.transaction_id,
+                card_last_four=payment.card_last_four,
+                payment_date=payment.payment_date,
+                amount=payment.amount
+            )
+
+        # Create concession preorder responses
+        concession_responses = []
+        for preorder in concession_preorders:
+            concession_item_response = None
+            if preorder.concession_item:
+                concession_item_response = ConcessionItemResponse(
+                    id=preorder.concession_item.id,
+                    name=preorder.concession_item.name,
+                    description=preorder.concession_item.description,
+                    price=preorder.concession_item.price,
+                    category_id=preorder.concession_item.category_id
+                )
+
+            concession_responses.append(
+                ConcessionPreorderResponse(
+                    id=preorder.id,
+                    order_id=preorder.order_id,
+                    concession_item_id=preorder.concession_item_id,
+                    quantity=preorder.quantity,
+                    unit_price=preorder.unit_price,
+                    total_price=preorder.total_price,
+                    status=preorder.status.value,
+                    pickup_code=preorder.pickup_code,
+                    pickup_date=preorder.pickup_date,
+                    concession_item=concession_item_response
+                )
+            )
+
+        orders_with_details.append(OrderWithTicketsAndPayment(
+            id=order.id,
+            user_id=order.user_id,
+            promocode_id=order.promocode_id,
+            order_number=order.order_number,
+            created_at=order.created_at,
+            expires_at=order.expires_at,
+            total_amount=order.total_amount,
+            discount_amount=order.discount_amount,
+            final_amount=order.final_amount,
+            status=order.status,
+            tickets=[TicketResponse.model_validate(ticket) for ticket in tickets],
+            payment=payment_response,
+            concession_preorders=concession_responses
+        ))
+
+    return orders_with_details
+
+
+@router.get("/my/paginated", response_model=List[OrderWithTicketsAndPayment])
+async def get_my_bookings_paginated(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    skip: int = 0,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get paginated bookings for current user."""
+    result = await db.execute(
+        select(Order)
+        .filter(Order.user_id == current_user.id)
+        .offset(skip)
+        .limit(limit)
         .order_by(Order.created_at.desc())
     )
     orders = result.scalars().all()
