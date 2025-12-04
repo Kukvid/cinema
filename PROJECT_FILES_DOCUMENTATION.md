@@ -317,7 +317,7 @@
 - `rental_contract_id` - Внешний ключ на RentalContract
 - `calculated_amount` - Рассчитанная сумма
 - `calculation_date` - Дата расчета
-- `status` - Статус платежа (enum: PENDING, PAID, FAILED, REFUNDED)
+- `status` - Статус платежа (enum: PENDING, paid, FAILED, refunded)
 - `payment_date` - Дата платежа
 - `payment_document_number` - Номер платежного документа
 - `created_at`, `updated_at` - Временные метки
@@ -339,7 +339,7 @@
 - `start_datetime` - Время начала
 - `end_datetime` - Время окончания (должно быть > start_datetime)
 - `ticket_price` - Базовая цена билета (должна быть >= 0)
-- `status` - Статус (enum: SCHEDULED, ONGOING, COMPLETED, CANCELLED)
+- `status` - Статус (enum: SCHEDULED, ONGOING, completed, cancelled)
 - `created_at`, `updated_at` - Временные метки
 
 **Связи**:
@@ -370,7 +370,7 @@
 - `price` - Цена билета
 - `purchase_date` - Дата покупки
 - `sales_channel` - Канал продажи (enum: ONLINE, BOX_OFFICE, MOBILE_APP)
-- `status` - Статус (enum: RESERVED, PAID, USED, CANCELLED, EXPIRED)
+- `status` - Статус (enum: RESERVED, paid, USED, cancelled, EXPIRED)
 - `qr_code` - QR код билета (base64)
 - `validation_date` - Дата валидации (использования)
 - `created_at`, `updated_at` - Временные метки
@@ -534,7 +534,7 @@
 - `total_amount` - Общая сумма (должна быть >= 0)
 - `discount_amount` - Сумма скидки (должна быть >= 0)
 - `final_amount` - Итоговая сумма (должна быть >= 0)
-- `status` - Статус (enum: CREATED, PENDING_PAYMENT, PAID, CANCELLED, REFUNDED)
+- `status` - Статус (enum: created, pending_payment, paid, cancelled, refunded)
 - `updated_at` - Дата обновления
 
 **Связи**:
@@ -565,7 +565,7 @@
 - `amount` - Сумма платежа
 - `payment_method` - Метод оплаты (enum: CARD, CASH, BONUS_POINTS, MOBILE_PAYMENT)
 - `payment_date` - Дата платежа
-- `status` - Статус (enum: PENDING, PAID, FAILED, REFUNDED)
+- `status` - Статус (enum: PENDING, paid, FAILED, refunded)
 - `transaction_id` - ID транзакции в платежной системе
 - `payment_system_fee` - Комиссия платежной системы
 - `card_last_four` - Последние 4 цифры карты
@@ -616,7 +616,7 @@
 - `quantity` - Количество (должно быть > 0)
 - `unit_price` - Цена за единицу (должна быть >= 0)
 - `total_price` - Общая стоимость (должна быть >= 0)
-- `status` - Статус (enum: PENDING, READY, COMPLETED, CANCELLED)
+- `status` - Статус (enum: PENDING, READY, completed, cancelled)
 - `pickup_code` - Код получения (QR код)
 - `pickup_date` - Дата получения
 - `created_at`, `updated_at` - Временные метки
@@ -646,7 +646,7 @@
 - `generated_at` - Дата генерации
 - `file_format` - Формат файла (enum: PDF, XLSX, CSV)
 - `file_url` - URL файла отчета
-- `status` - Статус (enum: GENERATING, COMPLETED, FAILED)
+- `status` - Статус (enum: GENERATING, completed, FAILED)
 - `created_at` - Дата создания записи
 
 **Связи**:
@@ -1318,13 +1318,13 @@
    - Требует аутентификации: `get_current_active_user`
    - Path параметр: `booking_id` (UUID)
    - Входные данные: `PaymentCreate`
-   - Создает платеж и обновляет статус заказа на PAID
+   - Создает платеж и обновляет статус заказа на paid
    - Возвращает: `PaymentResponse`
 
 5. **DELETE `/{booking_id}`** - Отменить заказ
    - Требует аутентификации: `get_current_active_user`
    - Path параметр: `booking_id` (UUID)
-   - Обновляет статус заказа и билетов на CANCELLED
+   - Обновляет статус заказа и билетов на cancelled
    - Возвращает: `{"detail": "Booking cancelled successfully"}`
 
 ---

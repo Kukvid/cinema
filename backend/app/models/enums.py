@@ -2,11 +2,10 @@ from enum import Enum
 
 
 class UserRoles(str, Enum):
-    SUPER_ADMIN = 'super_admin'
-    ADMIN = 'admin'
-    CONCESSION_MANAGER = 'concession_manager'
-    CASHIER = 'cashier'
-    USER = 'user'
+    SUPER_ADMIN = 'SUPER_ADMIN'
+    ADMIN = 'ADMIN'
+    STAFF = 'STAFF'
+    USER = 'USER'
 
 class CinemaStatus(str, Enum):
     ACTIVE = "active"
@@ -41,108 +40,111 @@ class ContractStatus(str, Enum):
 
 
 class PaymentStatus(str, Enum):
-    PENDING = "pending"
-    PAID = "paid"
-    FAILED = "failed"
-    REFUNDED = "refunded"
+    PENDING = "PENDING"
+    PAID = "PAID"
+    FAILED = "FAILED"
+    REFUNDED = "REFUNDED"
 
 
 class SessionStatus(str, Enum):
-    SCHEDULED = "scheduled"
-    ONGOING = "ongoing"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    SCHEDULED = "SCHEDULED"
+    ONGOING = "ONGOING"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
 
 
 class TicketStatus(str, Enum):
-    RESERVED = "reserved"
-    PAID = "paid"
-    USED = "used"
-    CANCELLED = "cancelled"
-    EXPIRED = "expired"
+    RESERVED = "RESERVED"
+    PAID = "PAID"
+    USED = "USED"
+    CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
 
 
 class SalesChannel(str, Enum):
-    ONLINE = "online"
-    BOX_OFFICE = "box_office"
-    MOBILE_APP = "mobile_app"
+    ONLINE = "ONLINE"
+    BOX_OFFICE = "BOX_OFFICE"
+    MOBILE_APP = "MOBILE_APP"
 
 
 class UserStatus(str, Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    BLOCKED = "blocked"
-    DELETED = "deleted"
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    BLOCKED = "BLOCKED"
+    DELETED = "DELETED"
 
 
 class Gender(str, Enum):
-    MALE = "male"
-    FEMALE = "female"
-    OTHER = "other"
-    PREFER_NOT_TO_SAY = "prefer_not_to_say"
+    MALE = "MALE"
+    FEMALE = "FEMALE"
+    OTHER = "OTHER"
+    PREFER_NOT_TO_SAY = "PREFER_NOT_TO_SAY"
 
 
 class BonusTransactionType(str, Enum):
-    ACCRUAL = "accrual"
-    DEDUCTION = "deduction"
-    EXPIRATION = "expiration"
+    ACCRUAL = "ACCRUAL"
+    DEDUCTION = "DEDUCTION"
+    EXPIRATION = "EXPIRATION"
 
 
 class DiscountType(str, Enum):
-    PERCENTAGE = "percentage"
-    FIXED_AMOUNT = "fixed_amount"
+    PERCENTAGE = "PERCENTAGE"
+    FIXED_AMOUNT = "FIXED_AMOUNT"
 
 
 class PromocodeStatus(str, Enum):
-    ACTIVE = "active"
-    EXPIRED = "expired"
-    DEPLETED = "depleted"
-    INACTIVE = "inactive"
+    ACTIVE = "ACTIVE"
+    EXPIRED = "EXPIRED"
+    DEPLETED = "DEPLETED"
+    INACTIVE = "INACTIVE"
 
 
 class OrderStatus(str, Enum):
-    CREATED = "created"
-    PENDING_PAYMENT = "pending_payment"
-    PAID = "paid"
-    CANCELLED = "cancelled"
-    REFUNDED = "refunded"
+    # активные
+    created = "created"
+    pending_payment = "pending_payment"
+    paid = "paid"
+    # неактивные
+    cancelled = "cancelled"
+    refunded = "refunded"
+    completed = "completed"
 
 
 class PaymentMethod(str, Enum):
-    CARD = "card"
-    CASH = "cash"
-    BONUS_POINTS = "bonus_points"
-    MOBILE_PAYMENT = "mobile_payment"
+    CARD = "CARD"
+    CASH = "CASH"
+    BONUS_POINTS = "BONUS_POINTS"
+    MOBILE_PAYMENT = "MOBILE_PAYMENT"
 
 
 class ConcessionItemStatus(str, Enum):
-    AVAILABLE = "available"
-    OUT_OF_STOCK = "out_of_stock"
-    DISCONTINUED = "discontinued"
+    AVAILABLE = "AVAILABLE"
+    OUT_OF_STOCK = "OUT_OF_STOCK"
+    DISCONTINUED = "DISCONTINUED"
 
 
 class PreorderStatus(str, Enum):
-    PENDING = "pending"
-    READY = "ready"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    PENDING = "PENDING"
+    READY = "READY"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
 
 
 class ReportType(str, Enum):
-    REVENUE = "revenue"
-    POPULAR_FILMS = "popular_films"
-    DISTRIBUTOR_PAYMENTS = "distributor_payments"
-    CONCESSION_SALES = "concession_sales"
-    USER_ACTIVITY = "user_activity"
+    REVENUE = "REVENUE"
+    POPULAR_FILMS = "POPULAR_FILMS"
+    DISTRIBUTOR_PAYMENTS = "DISTRIBUTOR_PAYMENTS"
+    CONCESSION_SALES = "CONCESSION_SALES"
+    USER_ACTIVITY = "USER_ACTIVITY"
 
 
 class ReportStatus(str, Enum):
-    GENERATING = "generating"
-    COMPLETED = "completed"
-    FAILED = "failed"
+    GENERATING = "GENERATING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
 class ReportFormat(str, Enum):
-    PDF = "pdf"
-    XLSX = "xlsx"
-    CSV = "csv"
+    PDF = "PDF"
+    XLSX = "XLSX"
+    CSV = "CSV"

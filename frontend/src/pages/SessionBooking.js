@@ -64,15 +64,21 @@ const SessionBooking = () => {
         severity: "info",
     });
     const [authModalOpen, setAuthModalOpen] = useState(false);
+    const [shouldBookAfterAuth, setShouldBookAfterAuth] = useState(false);
 
     useEffect(() => {
         loadData();
 
         // Проверяем, есть ли сохраненные данные для бронирования
-        const savedBookingData = localStorage.getItem('pendingBooking');
-        const returnUrl = localStorage.getItem('bookingReturnUrl');
+        const savedBookingData = localStorage.getItem("pendingBooking");
+        const returnUrl = localStorage.getItem("bookingReturnUrl");
 
-        if (savedBookingData && returnUrl && isAuthenticated && returnUrl === `/sessions/${id}/booking`) {
+        if (
+            savedBookingData &&
+            returnUrl &&
+            isAuthenticated &&
+            returnUrl === `/sessions/${id}/booking`
+        ) {
             // Если данные сохранены, пользователь аутентифицирован и мы на нужной странице
             const bookingData = JSON.parse(savedBookingData);
 
@@ -84,8 +90,8 @@ const SessionBooking = () => {
             setBonusAmount(bookingData.bonusAmount || 0);
 
             // Очищаем сохраненные данные
-            localStorage.removeItem('pendingBooking');
-            localStorage.removeItem('bookingReturnUrl');
+            localStorage.removeItem("pendingBooking");
+            localStorage.removeItem("bookingReturnUrl");
 
             // Продолжаем процесс бронирования
             setTimeout(() => {
@@ -109,22 +115,26 @@ const SessionBooking = () => {
                     cinema_id: cinemaId,
                 }),
                 // Fetch all categories sorted by display_order to maintain proper ordering
-                getFoodCategories()
+                getFoodCategories(),
             ]);
 
             // Sort categories by display_order
             const sortedCategories = allCategories
-                .filter(category =>
-                    concessionsData.some(item => item.category && item.category.id === category.id)
+                .filter((category) =>
+                    concessionsData.some(
+                        (item) =>
+                            item.category && item.category.id === category.id
+                    )
                 )
                 .sort((a, b) => a.display_order - b.display_order)
-                .map(category => category.name);
+                .map((category) => category.name);
 
             setSession(sessionData);
             setSeats(seatsData.seats ?? []);
             setConcessions(concessionsData);
 
-            if (sortedCategories.length > 0) setActiveCategory(sortedCategories[0]);
+            if (sortedCategories.length > 0)
+                setActiveCategory(sortedCategories[0]);
 
             setError(null);
         } catch (err) {
@@ -184,18 +194,21 @@ const SessionBooking = () => {
     };
 
     const calculateTotal = () => {
-        const ticketsTotal = selectedSeats && session
-            ? selectedSeats.length * (session.ticket_price || 0)
-            : 0;
+        const ticketsTotal =
+            selectedSeats && session
+                ? selectedSeats.length * (session.ticket_price || 0)
+                : 0;
 
         const concessionsTotal = selectedConcessions
             ? Object.entries(selectedConcessions).reduce(
-                (sum, [itemId, quantity]) => {
-                    const item = concessions.find((c) => c && c.id === parseInt(itemId));
-                    return sum + (item?.price || 0) * quantity;
-                },
-                0
-            )
+                  (sum, [itemId, quantity]) => {
+                      const item = concessions.find(
+                          (c) => c && c.id === parseInt(itemId)
+                      );
+                      return sum + (item?.price || 0) * quantity;
+                  },
+                  0
+              )
             : 0;
 
         const subtotal = ticketsTotal + concessionsTotal;
@@ -225,10 +238,10 @@ const SessionBooking = () => {
         return {
             ticketsTotal,
             concessionsTotal,
-            subtotal,  // Промежуточная сумма до скидок
+            subtotal, // Промежуточная сумма до скидок
             discountAmount,
             bonusDeduction,
-            total: finalTotal  // Финальная сумма после всех скидок и бонусов
+            total: finalTotal, // Финальная сумма после всех скидок и бонусов
         };
     };
 
@@ -242,10 +255,14 @@ const SessionBooking = () => {
                 useBonuses,
                 bonusAmount,
             };
-            localStorage.setItem('pendingBooking', JSON.stringify(bookingDataToSave));
-            localStorage.setItem('bookingReturnUrl', `/sessions/${id}/booking`);
+            localStorage.setItem(
+                "pendingBooking",
+                JSON.stringify(bookingDataToSave)
+            );
+            localStorage.setItem("bookingReturnUrl", `/sessions/${id}/booking`);
 
             setAuthModalOpen(true);
+            setShouldBookAfterAuth(true);
             return;
         }
 
@@ -259,29 +276,36 @@ const SessionBooking = () => {
             setError(null);
 
             // Создаем билеты из выбранных мест
-            const tickets = selectedSeats.map(seat_id => ({
+            const tickets = selectedSeats.map((seat_id) => ({
                 session_id: parseInt(id),
                 seat_id: parseInt(seat_id),
-                price: session?.ticket_price || 0,  // используем цену сеанса
-                sales_channel: "online"
+                price: session?.ticket_price || 0, // используем цену сеанса
+                sales_channel: "ONLINE",
             }));
 
             // Рассчитываем общую сумму заказа (билеты + кинобар)
-            const ticketsTotal = selectedSeats.length * (session?.ticket_price || 0);
+            const ticketsTotal =
+                selectedSeats.length * (session?.ticket_price || 0);
             const concessionsTotal = Object.entries(selectedConcessions).reduce(
                 (sum, [itemId, quantity]) => {
-                    const item = concessions.find((c) => c && c.id === parseInt(itemId));
+                    const item = concessions.find(
+                        (c) => c && c.id === parseInt(itemId)
+                    );
                     return sum + (item?.price || 0) * quantity;
                 },
                 0
             );
-            const totalOrderAmount = parseFloat((ticketsTotal + concessionsTotal).toFixed(2));
+            const totalOrderAmount = parseFloat(
+                (ticketsTotal + concessionsTotal).toFixed(2)
+            );
 
             const bookingData = {
                 tickets: tickets,
-                total_order_amount: totalOrderAmount,  // передаем общую сумму заказа
+                total_order_amount: totalOrderAmount, // передаем общую сумму заказа
                 promocode_code: appliedPromo?.code || undefined,
-                use_bonus_points: useBonuses ? parseFloat(bonusAmount || 0) : undefined,  // поле из схемы OrderCreate
+                use_bonus_points: useBonuses
+                    ? parseFloat(bonusAmount || 0)
+                    : undefined, // поле из схемы OrderCreate
             };
 
             const booking = await bookingsAPI.createBooking(bookingData);
@@ -291,8 +315,12 @@ const SessionBooking = () => {
                 try {
                     // Подготавливаем список всех предзаказов для отправки за один раз
                     const preordersList = [];
-                    for (const [concessionId, quantity] of Object.entries(selectedConcessions)) {
-                        const concessionItem = concessions.find(item => item.id === parseInt(concessionId));
+                    for (const [concessionId, quantity] of Object.entries(
+                        selectedConcessions
+                    )) {
+                        const concessionItem = concessions.find(
+                            (item) => item.id === parseInt(concessionId)
+                        );
                         if (concessionItem && quantity > 0) {
                             preordersList.push({
                                 order_id: booking.id,
@@ -308,7 +336,7 @@ const SessionBooking = () => {
                         await concessionsAPI.createPreorderBatch(preordersList);
                     }
                 } catch (preorderError) {
-                    console.error('Failed to create preorders:', preorderError);
+                    console.error("Failed to create preorders:", preorderError);
                     // Не прерываем основной заказ, если не удалось создать предзаказы на концессию
                 }
             }
@@ -348,7 +376,14 @@ const SessionBooking = () => {
     }
 
     const calculatedValues = calculateTotal();
-    const { ticketsTotal, concessionsTotal, subtotal, discountAmount, bonusDeduction, total } = calculatedValues;
+    const {
+        ticketsTotal,
+        concessionsTotal,
+        subtotal,
+        discountAmount,
+        bonusDeduction,
+        total,
+    } = calculatedValues;
     const categories = [
         ...new Set(
             concessions.map((item) => item?.category?.name).filter(Boolean)
@@ -357,7 +392,21 @@ const SessionBooking = () => {
     const filteredConcessions = concessions.filter(
         (item) => item?.category?.name === activeCategory
     );
-
+    const handleAuthSuccess = () => {
+        // Закрываем модальное окно
+        setAuthModalOpen(false);
+        // Проверяем, нужно ли выполнить бронирование после аутентификации
+        if (shouldBookAfterAuth) {
+            // Даем время контексту аутентификации обновиться, затем запускаем бронирование
+            setTimeout(() => {
+                // Повторный вызов handleBooking теперь пройдет проверку isAuthenticated
+                // и выполнит основную логику бронирования.
+                // Убедитесь, что флаг сброшен до вызова, или сбросьте его внутри handleBooking при начале новой попытки.
+                // В предложенном выше handleBooking, флаг сбрасывается в начале асинхронного выполнения.
+                handleBooking();
+            }, 100); // Небольшая задержка может помочь, но не всегда обязательна
+        }
+    };
     return (
         <Container
             maxWidth="xl"
@@ -397,7 +446,6 @@ const SessionBooking = () => {
                     item
                     xs={12}
                     lg={8}
-                    
                 >
                     {/* Информация о сеансе */}
                     <Paper
@@ -454,7 +502,8 @@ const SessionBooking = () => {
                                             icon={<SeatIcon />}
                                             label={`Вместимость: ${session?.hall?.capacity}`}
                                             sx={{
-                                                background: "rgba(70, 211, 105, 0.2)",
+                                                background:
+                                                    "rgba(70, 211, 105, 0.2)",
                                             }}
                                         />
                                     )}
@@ -462,7 +511,8 @@ const SessionBooking = () => {
                                         <Chip
                                             label={session?.hall?.hall_type}
                                             sx={{
-                                                background: "rgba(33, 150, 243, 0.2)",
+                                                background:
+                                                    "rgba(33, 150, 243, 0.2)",
                                             }}
                                         />
                                     )}
@@ -606,7 +656,9 @@ const SessionBooking = () => {
                                                     objectFit: "cover",
                                                 }}
                                                 image={
-                                                    (item.image_url || "").trim() ||
+                                                    (
+                                                        item.image_url || ""
+                                                    ).trim() ||
                                                     "https://via.placeholder.com/100x100/2a2a2a/ffffff?text=Food"
                                                 }
                                                 alt={item.name}
@@ -835,7 +887,12 @@ const SessionBooking = () => {
                                     }}
                                 >
                                     <Typography>Скидка по промокоду</Typography>
-                                    <Typography sx={{ fontWeight: 600, color: "#46d369" }}>
+                                    <Typography
+                                        sx={{
+                                            fontWeight: 600,
+                                            color: "#46d369",
+                                        }}
+                                    >
                                         -{discountAmount.toFixed(2)} ₽
                                     </Typography>
                                 </Box>
@@ -849,7 +906,12 @@ const SessionBooking = () => {
                                     }}
                                 >
                                     <Typography>Списание бонусов</Typography>
-                                    <Typography sx={{ fontWeight: 600, color: "#46d369" }}>
+                                    <Typography
+                                        sx={{
+                                            fontWeight: 600,
+                                            color: "#46d369",
+                                        }}
+                                    >
                                         -{bonusDeduction.toFixed(2)} ₽
                                     </Typography>
                                 </Box>
@@ -877,9 +939,25 @@ const SessionBooking = () => {
                                 />
                                 {useBonuses && (
                                     <>
-                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                                            Максимум можно использовать {Math.min(user.bonus_balance, (subtotal - discountAmount) * 0.99, subtotal - discountAmount - 11).toFixed(2)} бонусов
-                                            (до {Math.min(user.bonus_balance, (subtotal - discountAmount) * 0.99).toFixed(2)} при условии оплаты минимум 11 ₽)
+                                        <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                            sx={{ display: "block", mb: 1 }}
+                                        >
+                                            Максимум можно использовать{" "}
+                                            {Math.min(
+                                                user.bonus_balance,
+                                                (subtotal - discountAmount) *
+                                                    0.99,
+                                                subtotal - discountAmount - 11
+                                            ).toFixed(2)}{" "}
+                                            бонусов (до{" "}
+                                            {Math.min(
+                                                user.bonus_balance,
+                                                (subtotal - discountAmount) *
+                                                    0.99
+                                            ).toFixed(2)}{" "}
+                                            при условии оплаты минимум 11 ₽)
                                         </Typography>
                                         <TextField
                                             fullWidth
@@ -888,17 +966,39 @@ const SessionBooking = () => {
                                             label="Количество бонусов"
                                             value={bonusAmount}
                                             onChange={(e) => {
-                                                const totalAfterDiscount = Math.max(0, subtotal - discountAmount);
-                                                const maxBonusAllowed = Math.min(
-                                                    user?.bonus_balance || 0,
-                                                    totalAfterDiscount * 0.99 // 99% от общей суммы после промокода
-                                                );
+                                                const totalAfterDiscount =
+                                                    Math.max(
+                                                        0,
+                                                        subtotal -
+                                                            discountAmount
+                                                    );
+                                                const maxBonusAllowed =
+                                                    Math.min(
+                                                        user?.bonus_balance ||
+                                                            0,
+                                                        totalAfterDiscount *
+                                                            0.99 // 99% от общей суммы после промокода
+                                                    );
                                                 const minPaymentRequired = 11;
-                                                const maxBonusBasedOnMinPayment = Math.max(0, totalAfterDiscount - minPaymentRequired);
-                                                const maxPossibleBonus = Math.min(maxBonusAllowed, maxBonusBasedOnMinPayment);
+                                                const maxBonusBasedOnMinPayment =
+                                                    Math.max(
+                                                        0,
+                                                        totalAfterDiscount -
+                                                            minPaymentRequired
+                                                    );
+                                                const maxPossibleBonus =
+                                                    Math.min(
+                                                        maxBonusAllowed,
+                                                        maxBonusBasedOnMinPayment
+                                                    );
 
                                                 const newBonusAmount = Math.min(
-                                                    Math.max(0, parseFloat(e.target.value) || 0),
+                                                    Math.max(
+                                                        0,
+                                                        parseFloat(
+                                                            e.target.value
+                                                        ) || 0
+                                                    ),
                                                     maxPossibleBonus
                                                 );
                                                 setBonusAmount(newBonusAmount);
@@ -907,8 +1007,15 @@ const SessionBooking = () => {
                                                 min: 0,
                                                 max: Math.min(
                                                     user?.bonus_balance || 0,
-                                                    (subtotal - discountAmount) * 0.99, // 99% от суммы после скидки
-                                                    Math.max(0, (subtotal - discountAmount) - 11) // чтобы осталось минимум 11 ₽
+                                                    (subtotal -
+                                                        discountAmount) *
+                                                        0.99, // 99% от суммы после скидки
+                                                    Math.max(
+                                                        0,
+                                                        subtotal -
+                                                            discountAmount -
+                                                            11
+                                                    ) // чтобы осталось минимум 11 ₽
                                                 ),
                                             }}
                                             sx={{ mt: 1 }}
@@ -980,16 +1087,9 @@ const SessionBooking = () => {
                 open={authModalOpen}
                 onClose={() => {
                     setAuthModalOpen(false);
+                    setShouldBookAfterAuth(false);
                 }}
-                onAuthSuccess={() => {
-                    // После успешной авторизации сбрасываем модальное окно
-                    setAuthModalOpen(false);
-
-                    // Повторно вызываем handleBooking через таймаут, чтобы дать время обновлению состояния аутентификации
-                    setTimeout(() => {
-                        handleBooking();
-                    }, 100); // Даем немного времени для обновления состояния аутентификации
-                }}
+                onAuthSuccess={handleAuthSuccess} // Даем немного времени для обновления состояния аутентификации
             />
         </Container>
     );

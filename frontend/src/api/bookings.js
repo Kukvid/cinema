@@ -24,8 +24,13 @@ export const bookingsAPI = {
   },
 
 
-  cancelBooking: async (id) => {
-    const response = await axios.delete(`/bookings/${id}`);
+  cancelPendingOrder: async (id) => {
+    const response = await axios.post(`/bookings/${id}/cancel`);
+    return response.data;
+  },
+
+  returnOrder: async (id) => {
+    const response = await axios.post(`/bookings/${id}/return`);
     return response.data;
   },
 

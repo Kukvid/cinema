@@ -194,7 +194,7 @@ async def generate_report(
 
     # In a real implementation, this would trigger the report generation process
     # For now, we'll just update the status and provide a mock file path
-    report.status = ReportStatus.COMPLETED
+    report.status = ReportStatus.completed
     report.file_url = f"/reports/report_{report_id}.{report.file_format.value.lower()}"
 
     await db.commit()

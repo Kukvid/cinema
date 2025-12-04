@@ -60,6 +60,16 @@ def generate_concession_qr(preorder_id: int, order_id: int) -> str:
     return generate_qr_code(qr_data)
 
 
+def generate_order_qr(order_id: int) -> str:
+    """
+    Generate a QR code for an order.
+
+    Format: ORDER:{order_id}
+    """
+    qr_data = f"ORDER:{order_id}"
+    return generate_qr_code(qr_data)
+
+
 def parse_qr_data(qr_data: str) -> Optional[dict]:
     """
     Parse QR code data into structured format.
@@ -86,6 +96,11 @@ def parse_qr_data(qr_data: str) -> Optional[dict]:
                 "type": "concession",
                 "preorder_id": int(parts[1]),
                 "order_id": int(parts[2]),
+            }
+        elif qr_type == "ORDER" and len(parts) == 2:
+            return {
+                "type": "order",
+                "order_id": int(parts[1]),
             }
 
         return None

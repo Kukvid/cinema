@@ -30,9 +30,9 @@
 - **Impact**: Invalid or problematic session times could be created.
 
 ### 5. Missing Comprehensive Session Cancellation Logic (Medium)
-- **Issue**: When sessions are cancelled, there's no automatic handling of related tickets/orders. The system has `SessionStatus.CANCELLED` but no cascade logic for related bookings.
+- **Issue**: When sessions are cancelled, there's no automatic handling of related tickets/orders. The system has `SessionStatus.cancelled` but no cascade logic for related bookings.
 - **Location**: No session cancellation endpoint handles related tickets and orders.
-- **Impact**: Cancelled sessions may still have paid/active tickets, leading to customer confusion and service desk issues.
+- **Impact**: cancelled sessions may still have paid/active tickets, leading to customer confusion and service desk issues.
 
 ## Minor Issues
 

@@ -57,13 +57,13 @@ async def process_payment(
         )
 
     # Check order status
-    if order.status == OrderStatus.PAID:
+    if order.status == OrderStatus.paid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Order has already been paid"
         )
 
-    if order.status == OrderStatus.CANCELLED:
+    if order.status == OrderStatus.cancelled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot pay for cancelled order"
@@ -103,26 +103,63 @@ async def process_payment(
     payment_time = datetime.now(moscow_tz).replace(tzinfo=None)
     transaction_id = f"TXN-{payment_time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(4).upper()}"
 
-    # Create payment record
-    new_payment = Payment(
-        order_id=order.id,
-        payment_date=payment_time,
-        amount=payment_data.amount,
-        payment_method=PaymentMethod(payment_data.payment_method),
-        transaction_id=transaction_id,
-        status=PaymentStatus.PENDING,
-        card_last_four=card_number[-4:] if card_number else None,
-        # In a real system we would never store full CVV or full expiry date for security reasons
-        # For testing purposes only - in production these would not be stored
+    # Check if a payment already exists for this order
+    existing_payment_query = await db.execute(
+        select(Payment).filter(Payment.order_id == order.id)
     )
-    db.add(new_payment)
+    existing_payment = existing_payment_query.scalar_one_or_none()
+
+    if existing_payment:
+        # If a payment already exists and is not in a final state, we might want to update it
+        # Or we might want to return an error to prevent duplicate payments
+        # Let's allow updating payments that are in PENDING or FAILED state
+        if existing_payment.status in [PaymentStatus.PENDING, PaymentStatus.FAILED]:
+            # Update the existing payment in the database directly
+            from sqlalchemy import update
+            await db.execute(
+                update(Payment)
+                .where(Payment.id == existing_payment.id)
+                .values(
+                    amount=payment_data.amount,
+                    payment_method=PaymentMethod(payment_data.payment_method),
+                    transaction_id=transaction_id,
+                    status=PaymentStatus.PENDING,
+                    payment_date=payment_time,
+                    card_last_four=card_number[-4:] if card_number else None
+                )
+            )
+            # Query the updated payment to get the fresh values
+            updated_payment_result = await db.execute(
+                select(Payment).filter(Payment.id == existing_payment.id)
+            )
+            new_payment = updated_payment_result.scalar_one()
+        else:
+            # If payment already succeeded, don't allow another payment attempt
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Payment already exists for order {order_id} with status {existing_payment.status.value}. Cannot initiate new payment."
+            )
+    else:
+        # Create new payment record
+        new_payment = Payment(
+            order_id=order.id,
+            payment_date=payment_time,
+            amount=payment_data.amount,
+            payment_method=PaymentMethod(payment_data.payment_method),
+            transaction_id=transaction_id,
+            status=PaymentStatus.PENDING,
+            card_last_four=card_number[-4:] if card_number else None,
+            # In a real system we would never store full CVV or full expiry date for security reasons
+            # For testing purposes only - in production these would not be stored
+        )
+        db.add(new_payment)
 
     # Simulate payment processing (in real app this would integrate with payment gateway)
     try:
         # Here we could integrate with a real payment gateway
         # For now, we'll simulate successful payment
         new_payment.status = PaymentStatus.PAID
-        order.status = OrderStatus.PAID
+        order.status = OrderStatus.paid
 
         # Update ticket statuses and generate single order QR code for all tickets and concessions
         result = await db.execute(
@@ -209,7 +246,7 @@ async def process_payment(
     except Exception as e:
         # If payment fails, update status
         new_payment.status = PaymentStatus.FAILED
-        order.status = OrderStatus.PENDING_PAYMENT  # or keep as CREATED?
+        order.status = OrderStatus.pending_payment  # or keep as created?
         await db.commit()
         await db.refresh(new_payment)
 
@@ -296,6 +333,18 @@ async def get_payment_details(
     full_total_amount = order.total_amount + Decimal(str(concession_total))
     full_final_amount = order.final_amount + Decimal(str(concession_total))
 
+    # Get payment to retrieve transaction_id
+    payment_result = await db.execute(
+        select(Payment).filter(Payment.order_id == order_id)
+    )
+    payment = payment_result.scalar_one_or_none()
+
+    # Reconstruct QR data
+    qr_data = None
+    if payment and payment.transaction_id:
+        qr_data = f"ORDER-{order.id}-{payment.transaction_id}"
+
+
     return {
         "order_id": order.id,
         "order_number": order.order_number,
@@ -306,6 +355,8 @@ async def get_payment_details(
         "tickets_total": float(tickets_total),
         "concessions_total": float(concession_total),
         "created_at": order.created_at.isoformat() if order.created_at else None,
+        "qr_code": order.qr_code,
+        "qr_data": qr_data,
         "tickets": [
             {
                 "id": ticket.id,

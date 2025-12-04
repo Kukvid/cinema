@@ -252,7 +252,7 @@ async def create_session(
         select(Session).filter(
             and_(
                 Session.hall_id == session_data.hall_id,
-                Session.status != SessionStatus.CANCELLED,
+                Session.status != SessionStatus.cancelled,
                 or_(
                     # New session starts during existing session
                     and_(

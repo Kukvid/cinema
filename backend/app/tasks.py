@@ -12,7 +12,7 @@ from app.config import settings
 from app.models.order import Order
 from app.models.ticket import Ticket
 from app.models.concession_preorder import ConcessionPreorder
-from app.models.enums import OrderStatus, TicketStatus, PreorderStatus
+from app.models.enums import OrderStatus, TicketStatus, PreorderStatus, SessionStatus
 from app.database import engine, get_db
 from app.models.bonus_account import BonusAccount
 from app.models.bonus_transaction import BonusTransaction
@@ -38,11 +38,11 @@ class OrderCleanupService:
         async with self.SessionLocal() as db:
             try:
                 # Find orders that are pending payment and have exceeded expiration time
-                current_time =datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+                current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
 
                 expired_orders_result = await db.execute(
                     select(Order).filter(
-                        Order.status.in_([OrderStatus.CREATED, OrderStatus.PENDING_PAYMENT]),
+                        Order.status.in_([OrderStatus.created, OrderStatus.pending_payment]),
                         Order.expires_at < current_time
                     )
                 )
@@ -52,9 +52,9 @@ class OrderCleanupService:
                     logger.info(f"Cancelling expired order: {order.id}")
 
                     # Update order status to cancelled
-                    order.status = OrderStatus.CANCELLED
+                    order.status = OrderStatus.cancelled  # For OrderStatus, names remain lowercase as per requirement
                     await db.commit()
-                    
+
                     # Update tickets status to cancelled
                     await db.execute(
                         update(Ticket)
@@ -135,9 +135,11 @@ class OrderCleanupService:
         async with self.SessionLocal() as db:
             try:
                 current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+                logger.info(f"Current time for comparison: {current_time}")
 
                 # Update sessions that have started but are still marked as scheduled
-                started_result = await db.execute(
+                logger.info("Updating started sessions...")
+                started_query = (
                     update(Session)
                     .where(
                         and_(
@@ -145,12 +147,15 @@ class OrderCleanupService:
                             Session.start_datetime <= current_time
                         )
                     )
-                    .values(status=SessionStatus.IN_PROGRESS)
+                    .values(status=SessionStatus.ONGOING)
                 )
+                started_result = await db.execute(started_query)
                 started_count = started_result.rowcount
+                logger.info(f"Started sessions updated count: {started_count}")
 
                 # Update sessions that have ended but are still not completed
-                ended_result = await db.execute(
+                logger.info("Updating ended sessions...")
+                ended_query = (
                     update(Session)
                     .where(
                         and_(
@@ -161,17 +166,84 @@ class OrderCleanupService:
                     )
                     .values(status=SessionStatus.COMPLETED)
                 )
+                ended_result = await db.execute(ended_query)
                 ended_count = ended_result.rowcount
+                logger.info(f"Ended sessions updated count: {ended_count}")
 
                 await db.commit()
 
                 if started_count > 0 or ended_count > 0:
-                    logger.info(f"Updated {started_count} sessions to IN_PROGRESS and {ended_count} sessions to COMPLETED")
+                    logger.info(f"Updated {started_count} sessions to ongoing and {ended_count} sessions to completed")
                 else:
                     logger.info("No session status updates needed")
 
             except Exception as e:
-                logger.error(f"Error in update_session_statuses task: {str(e)}")
+                logger.error(f"Error in update_session_statuses task: {str(e)}", exc_info=True)
+                logger.error(f"Exception type: {type(e)}")
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                await db.rollback()
+
+    async def update_completed_order_statuses(self):
+        """Update order statuses to 'completed' when all tickets and concession items are used/completed"""
+        logger.info("Running completed order status update task...")
+
+        async with self.SessionLocal() as db:
+            try:
+                # Also check for orders where session time has passed and items are still pending
+                # This handles the case where orders should be completed based on time
+                current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+
+                # Find sessions that have ended
+                sessions_result = await db.execute(
+                    select(Session)
+                    .join(Ticket, Session.id == Ticket.session_id)
+                    .join(Order, Ticket.order_id == Order.id)
+                    .filter(Session.end_datetime < current_time)
+                    .distinct()
+                )
+                ended_sessions = sessions_result.scalars().all()
+
+                updated_count = 0
+                for session in ended_sessions:
+                    # Get all orders that have tickets for this ended session
+                    orders_with_session_tickets = await db.execute(
+                        select(Order)
+                        .join(Ticket, Order.id == Ticket.order_id)
+                        .filter(Ticket.session_id == session.id)
+                    )
+                    session_orders = orders_with_session_tickets.scalars().all()
+
+                    for order in session_orders:
+                        # If session ended and order is not yet completed, check if it should be marked as completed
+                        if order.status not in [OrderStatus.completed, OrderStatus.cancelled, OrderStatus.refunded]:
+                            # Get the earliest session time for this order to make sure this session was the determining one
+                            ticket_sessions_result = await db.execute(
+                                select(Session.start_datetime)
+                                .join(Ticket, Ticket.session_id == Session.id)
+                                .filter(Ticket.order_id == order.id)
+                                .order_by(Session.start_datetime.asc())
+                            )
+                            session_datetimes = ticket_sessions_result.scalars().all()
+
+                            if session_datetimes:
+                                earliest_session_time = min(session_datetimes)
+                                # If session has ended, mark order as completed if all items have been processed
+                                # Even if not all items are marked as used, if session has passed, we consider it completed
+                                if earliest_session_time < current_time:
+                                    # If session time has passed, mark order as completed regardless of item usage
+                                    # This is the main business rule: once session time passes, order is considered completed
+                                    # Explicitly use the value to avoid any enum conversion issues
+                                    order.status = OrderStatus.completed  # For OrderStatus, use lowercase member name
+                                    logger.info(f"Order {order.id} marked as completed (session time passed)")
+                                    updated_count += 1
+
+                if updated_count > 0:
+                    await db.commit()
+                    logger.info(f"Updated {updated_count} orders to completed status")
+
+            except Exception as e:
+                logger.error(f"Error in update_completed_order_statuses task: {str(e)}", exc_info=True)
                 await db.rollback()
 
     def start_scheduler(self):
@@ -190,6 +262,15 @@ class OrderCleanupService:
             trigger=IntervalTrigger(minutes=1),  # Run every minute to update session statuses
             id='update_session_statuses',
             name='Update session statuses based on time',
+            replace_existing=True
+        )
+
+        # Add the completed order status update job that runs every 2 minutes
+        self.scheduler.add_job(
+            self.update_completed_order_statuses,
+            trigger=IntervalTrigger(minutes=2),  # Run every 2 minutes to update completed order statuses
+            id='update_completed_order_statuses',
+            name='Update completed order statuses',
             replace_existing=True
         )
 

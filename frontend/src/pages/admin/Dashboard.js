@@ -29,9 +29,14 @@ import {
   Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // Roles that should have restricted access
+  const isStaff = user?.role === 'staff';
 
   const stats = [
     {
@@ -64,86 +69,105 @@ const Dashboard = () => {
     },
   ];
 
-  const menuItems = [
+  // All menu items with restriction flag
+  const allMenuItems = [
     {
       title: 'Управление пользователями',
       icon: <PeopleIcon />,
       path: '/admin/users',
       description: 'Управление учетными записями пользователей',
+      restrictedForStaff: true,
     },
     {
       title: 'Управление кинотеатрами',
       icon: <PlaceIcon />,
       path: '/admin/cinemas',
       description: 'Добавление и редактирование кинотеатров и залов',
+      restrictedForStaff: true,
     },
     {
       title: 'Управление фильмами',
       icon: <MovieIcon />,
       path: '/admin/films',
       description: 'Каталог фильмов, постеры, описания',
+      restrictedForStaff: true,
     },
     {
       title: 'Управление жанрами',
       icon: <CategoryIcon />,
       path: '/admin/genres',
       description: 'Управление жанрами фильмов',
+      restrictedForStaff: true,
     },
     {
       title: 'Управление сеансами',
       icon: <EventIcon />,
       path: '/admin/sessions',
       description: 'Расписание показов, цены, залы',
+      restrictedForStaff: true,
     },
     {
       title: 'Управление залами',
       icon: <PlaceIcon />,
       path: '/admin/halls',
       description: 'Настройка залов и вместимости',
+      restrictedForStaff: true,
     },
     {
       title: 'Управление местами',
       icon: <EventIcon />,
       path: '/admin/seats',
       description: 'Конфигурация мест в залах',
+      restrictedForStaff: true,
     },
     {
       title: 'Управление дистрибьюторами',
       icon: <PersonIcon />,
       path: '/admin/distributors',
       description: 'Управление контрактами с дистрибьюторами',
+      restrictedForStaff: true,
     },
     {
       title: 'Управление договорами',
       icon: <AssignmentIcon />,
       path: '/admin/contracts',
       description: 'Управление договорами с дистрибьюторами',
+      restrictedForStaff: true,
     },
     {
       title: 'Кинобар',
       icon: <FoodIcon />,
       path: '/admin/concessions',
       description: 'Товары кинобара и их цены',
+      restrictedForStaff: false,
     },
     {
       title: 'Категории кинобара',
       icon: <CategoryIcon />,
       path: '/admin/food-categories',
       description: 'Управление категориями товаров',
+      restrictedForStaff: true,
     },
     {
       title: 'Отчеты',
       icon: <AssessmentIcon />,
       path: '/admin/reports',
       description: 'Формирование и анализ отчетов',
+      restrictedForStaff: true,
     },
     {
       title: 'Промокоды',
       icon: <PromoIcon />,
       path: '/admin/promocodes',
       description: 'Управление промокодами и скидками',
+      restrictedForStaff: true,
     },
   ];
+
+  // Filter menu items based on user role
+  const menuItems = isStaff
+    ? allMenuItems.filter(item => !item.restrictedForStaff)
+    : allMenuItems;
 
   return (
     <Container maxWidth="xl" sx={{ py: 6 }}>
@@ -215,6 +239,13 @@ const Dashboard = () => {
         Управление системой
       </Typography>
 
+      {/* Display message for staff users */}
+      {isStaff && (
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+          Вы видите ограниченную версию панели управления как сотрудник кинотеатра
+        </Typography>
+      )}
+
       <Grid container spacing={3}>
         {menuItems.map((item, index) => (
           <Grid item xs={12} md={6} key={index}>
@@ -270,6 +301,25 @@ const Dashboard = () => {
             </Paper>
           </Grid>
         ))}
+        {isStaff && menuItems.length === 0 && (
+          <Grid item xs={12}>
+            <Paper
+              sx={{
+                p: 4,
+                textAlign: 'center',
+                background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)',
+                border: '1px solid rgba(229, 9, 20, 0.2)',
+              }}
+            >
+              <Typography variant="h6" color="text.secondary">
+                У вас нет доступа к разделам панели администрирования
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Обратитесь к администратору системы для получения необходимых прав
+              </Typography>
+            </Paper>
+          </Grid>
+        )}
       </Grid>
     </Container>
   );

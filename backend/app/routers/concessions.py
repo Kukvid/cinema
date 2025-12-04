@@ -344,3 +344,37 @@ async def create_preorder_batch(
         pickup_code=first_preorder.pickup_code,
         status=first_preorder.status.value
     )
+
+
+@router.post("/preorders/{preorder_id}/complete")
+async def mark_concession_item_as_completed(
+    preorder_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark a concession preorder as completed - for concession staff use."""
+    # Verify user has staff rights (admin or concession staff role)
+    if current_user.role not in [UserRoles.ADMIN, UserRoles.SUPER_ADMIN, UserRoles.STAFF]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins and staff can mark concession items as completed"
+        )
+
+    # Get the preorder
+    result = await db.execute(
+        select(ConcessionPreorder).filter(ConcessionPreorder.id == preorder_id)
+    )
+    preorder = result.scalar_one_or_none()
+
+    if not preorder:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Concession preorder not found"
+        )
+
+    # Update the status to completed
+    preorder.status = PreorderStatus.completed
+    await db.commit()
+    await db.refresh(preorder)
+
+    return preorder

@@ -18,6 +18,8 @@ import {
     ConfirmationNumber as TicketIcon,
     AdminPanelSettings as AdminIcon,
     Logout as LogoutIcon,
+    QrCodeScanner as QrCodeScannerIcon,
+    LocalCafe as LocalCafeIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -144,6 +146,34 @@ const Header = () => {
                                     Админ-панель
                                 </Button>
                             )}
+                            {isAuthenticated && (user?.role === "admin" || user?.role === "staff") && (
+                                <Button
+                                    color="inherit"
+                                    startIcon={<QrCodeScannerIcon />}
+                                    onClick={() => navigate("/controller")}
+                                    sx={{
+                                        "&:hover": {
+                                            color: "#e50914",
+                                        },
+                                    }}
+                                >
+                                    Контрольный пункт
+                                </Button>
+                            )}
+                            {isAuthenticated && (user?.role === "admin" || user?.role === "staff") && (
+                                <Button
+                                    color="inherit"
+                                    startIcon={<LocalCafeIcon />}
+                                    onClick={() => navigate("/concession-staff")}
+                                    sx={{
+                                        "&:hover": {
+                                            color: "#ffd700",
+                                        },
+                                    }}
+                                >
+                                    Кинобар
+                                </Button>
+                            )}
                         </Box>
 
                         <Box sx={{ flexGrow: 0 }}>
@@ -206,6 +236,18 @@ const Header = () => {
                                             <MenuItem onClick={handleAdmin}>
                                                 <AdminIcon sx={{ mr: 2 }} />
                                                 Админ-панель
+                                            </MenuItem>
+                                        )}
+                                        {(user?.role === "admin" || user?.role === "staff") && (
+                                            <MenuItem onClick={() => { navigate("/controller"); handleClose(); }}>
+                                                <QrCodeScannerIcon sx={{ mr: 2 }} />
+                                                Контрольный пункт
+                                            </MenuItem>
+                                        )}
+                                        {(user?.role === "admin" || user?.role === "staff") && (
+                                            <MenuItem onClick={() => { navigate("/concession-staff"); handleClose(); }}>
+                                                <LocalCafeIcon sx={{ mr: 2 }} />
+                                                Работник кинобара
                                             </MenuItem>
                                         )}
                                         <MenuItem onClick={handleLogout}>

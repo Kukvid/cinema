@@ -27,4 +27,14 @@ export const ticketsAPI = {
     const response = await axios.get(`/tickets/${id}`);
     return response.data;
   },
+
+  validateTicket: async (qrCode) => {
+    const response = await axios.post('/tickets/validate', { qr_code: qrCode });
+    return response.data;
+  },
+
+  markTicketAsUsed: async (ticketId) => {
+    const response = await axios.post(`/tickets/${ticketId}/use`);
+    return response.data;
+  },
 };

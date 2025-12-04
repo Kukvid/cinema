@@ -208,7 +208,7 @@ Found 19 tables in database:
   ✓ users
 
 ======================================================================
-✓ DATABASE INITIALIZATION COMPLETED SUCCESSFULLY!
+✓ DATABASE INITIALIZATION completed SUCCESSFULLY!
 ======================================================================
 
 Next steps:
@@ -271,47 +271,47 @@ CINEMA MANAGEMENT SYSTEM - DATABASE SEED
 ============================================================
 
 1. Creating roles...
-   Created 3 roles
+   created 3 roles
 
 2. Creating cinemas...
-   Created 3 cinemas
+   created 3 cinemas
 
 3. Creating halls and seats...
-   Created 7 halls and 672 seats
+   created 7 halls and 672 seats
 
 4. Creating films...
-   Created 20 films
+   created 20 films
 
 5. Creating distributors...
-   Created 3 distributors
+   created 3 distributors
 
 6. Creating rental contracts...
-   Created 20 rental contracts
+   created 20 rental contracts
 
 7. Creating users...
-   Created 8 users
+   created 8 users
 
 8. Creating bonus accounts...
-   Created 8 bonus accounts
+   created 8 bonus accounts
 
 9. Creating sessions...
-   Created 53 sessions
+   created 53 sessions
 
 10. Creating promocodes...
-   Created 7 promocodes
+   created 7 promocodes
 
 11. Creating concession items...
-   Created 57 concession items
+   created 57 concession items
 
 12. Creating orders and tickets...
-   Created 12 orders
-   Created 18 tickets
-   Created 12 payments
-   Created 5 concession preorders
-   Created 12 bonus transactions
+   created 12 orders
+   created 18 tickets
+   created 12 payments
+   created 5 concession preorders
+   created 12 bonus transactions
 
 ============================================================
-SEED COMPLETED SUCCESSFULLY!
+SEED completed SUCCESSFULLY!
 ============================================================
 ```
 

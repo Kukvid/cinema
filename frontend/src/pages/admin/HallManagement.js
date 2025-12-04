@@ -38,8 +38,10 @@ import {
 import { hallsAPI } from '../../api/halls';
 import { cinemasAPI } from '../../api/cinemas';
 import Loading from '../../components/Loading';
+import { useAuth } from '../../context/AuthContext';
 
 const HallManagement = () => {
+  const { user: currentUser } = useAuth();
   const [halls, setHalls] = useState([]);
   const [cinemas, setCinemas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -67,7 +69,18 @@ const HallManagement = () => {
         hallsAPI.getHalls(),
         cinemasAPI.getCinemas()
       ]);
-      setHalls(hallsData);
+
+      // For staff, filter halls to only show halls from their cinema
+      let filteredHalls = hallsData;
+
+      if (currentUser?.role === 'staff' && currentUser?.cinema_id) {
+        filteredHalls = hallsData.filter(hall => {
+          // Match halls with the staff's cinema
+          return hall.cinema_id === currentUser.cinema_id;
+        });
+      }
+
+      setHalls(filteredHalls);
       setCinemas(cinemasData);
     } catch (err) {
       setError('Не удалось загрузить данные');
@@ -116,11 +129,16 @@ const HallManagement = () => {
 
   const handleSubmit = async () => {
     try {
-      const submitData = {
+      let submitData = {
         ...formData,
         capacity: parseInt(formData.capacity)
       };
-      
+
+      // For staff users, ensure they can only create/update halls for their assigned cinema
+      if (currentUser?.role === 'staff' && currentUser?.cinema_id) {
+        submitData.cinema_id = currentUser.cinema_id;
+      }
+
       if (editingHall) {
         await hallsAPI.updateHall(editingHall.id, submitData);
       } else {
@@ -282,12 +300,25 @@ const HallManagement = () => {
                   name="cinema_id"
                   value={formData.cinema_id}
                   onChange={handleInputChange}
+                  disabled={currentUser?.role === 'staff'} // Staff can only select their assigned cinema
                 >
-                  {cinemas.map((cinema) => (
-                    <MenuItem key={cinema.id} value={cinema.id}>
-                      {cinema.name}
-                    </MenuItem>
-                  ))}
+                  {currentUser?.role === 'staff' && currentUser?.cinema_id ? (
+                    // For staff, only show their assigned cinema
+                    cinemas
+                      .filter(cinema => cinema.id === currentUser.cinema_id)
+                      .map((cinema) => (
+                        <MenuItem key={cinema.id} value={cinema.id}>
+                          {cinema.name}
+                        </MenuItem>
+                      ))
+                  ) : (
+                    // For admin, show all cinemas
+                    cinemas.map((cinema) => (
+                      <MenuItem key={cinema.id} value={cinema.id}>
+                        {cinema.name}
+                      </MenuItem>
+                    ))
+                  )}
                 </Select>
               </FormControl>
             </Grid>
@@ -347,7 +378,28 @@ const HallManagement = () => {
                 onChange={handleInputChange}
                 multiline
                 rows={6}
-                helperText="Опишите конфигурацию мест в формате JSON"
+                helperText={
+                  <>
+                    Опишите конфигурацию мест в формате JSON
+                    <br />
+                    <strong>Пример формата:</strong>
+                    <br />
+                    <code style={{background: '#f5f5f5', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8em'}}>
+                      {`{
+  "rows": [
+    {
+      "row_number": 1,
+      "seats": [
+        {"seat_number": 1, "type": "regular", "available": true},
+        {"seat_number": 2, "type": "regular", "available": true},
+        {"seat_number": 3, "type": "vip", "available": true}
+      ]
+    }
+  ]
+}`}
+                    </code>
+                  </>
+                }
               />
             </Grid>
           </Grid>

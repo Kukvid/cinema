@@ -74,7 +74,7 @@ async def health_check():
 from app.routers import (
     auth, cinemas, halls, films, genres, sessions,
     bookings, concessions, distributors, contracts, food_categories, promocodes, tickets, payments,
-    users, roles, reports, seats
+    users, roles, reports, seats, qr_scanner
 )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
@@ -91,6 +91,7 @@ app.include_router(contracts.router, prefix="/api/v1/contracts", tags=["Contract
 app.include_router(promocodes.router, prefix="/api/v1/promocodes", tags=["Promocodes"])
 app.include_router(tickets.router, prefix="/api/v1/tickets", tags=["Tickets"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["Payments"])
+app.include_router(qr_scanner.router, prefix="/api/v1/qr-scanner", tags=["QR Scanner"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
 app.include_router(roles.router, prefix="/api/v1/roles", tags=["Roles"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])

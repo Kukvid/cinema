@@ -37,8 +37,10 @@ import Loading from '../../components/Loading';
 import { concessionsAPI } from '../../api/concessions';
 import * as foodCategoriesAPI from '../../api/foodCategories';
 import { useForm } from 'react-hook-form';
+import { useAuth } from '../../context/AuthContext';
 
 const ConcessionManagement = () => {
+  const { user: currentUser } = useAuth();
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,11 +68,20 @@ const ConcessionManagement = () => {
   const loadData = async () => {
     try {
       setLoading(true);
+      // For staff users, only load concession items from their cinema
       const [itemsData, categoriesData] = await Promise.all([
         concessionsAPI.getConcessionItems(),
         foodCategoriesAPI.getFoodCategories()
       ]);
-      setItems(itemsData);
+
+      // For staff, filter items to only show items from their cinema
+      let filteredItems = itemsData;
+
+      if (currentUser?.role === 'staff' && currentUser?.cinema_id) {
+        filteredItems = itemsData.filter(item => item.cinema_id === currentUser.cinema_id);
+      }
+
+      setItems(filteredItems);
       setCategories(categoriesData);
       setError(null);
     } catch (err) {
@@ -89,7 +100,7 @@ const ConcessionManagement = () => {
         description: item.description,
         price: item.price,
         category_id: item.category_id,
-        is_available: item.is_available,
+        status: item.status,
         stock_quantity: item.stock_quantity,
         image_url: item.image_url || ''
       });
@@ -99,7 +110,7 @@ const ConcessionManagement = () => {
         description: '',
         price: '',
         category_id: '',
-        is_available: true,
+        status: true,
         stock_quantity: 0,
         image_url: ''
       });
@@ -123,7 +134,7 @@ const ConcessionManagement = () => {
         description: data.description,
         price: parseFloat(data.price),
         category_id: parseInt(data.category_id),
-        is_available: data.is_available,
+        status: data.status,
         stock_quantity: parseInt(data.stock_quantity),
         image_url: data.image_url || null
       };
@@ -270,9 +281,9 @@ const ConcessionManagement = () => {
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={item.is_available ? 'Доступен' : 'Недоступен'}
+                      label={item.status ? 'Доступен' : 'Недоступен'}
                       size="small"
-                      color={item.is_available ? 'success' : 'error'}
+                      color={item.status ? 'success' : 'error'}
                       variant="outlined"
                     />
                   </TableCell>
@@ -439,8 +450,8 @@ const ConcessionManagement = () => {
                 <FormControlLabel
                   control={
                     <Switch
-                      checked={watch('is_available') || false}
-                      onChange={(e) => setValue('is_available', e.target.checked)}
+                      checked={watch('status') || false}
+                      onChange={(e) => setValue('status', e.target.checked)}
                       color="success"
                     />
                   }

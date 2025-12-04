@@ -13,6 +13,8 @@ from app.models.hall import Hall
 from app.models.cinema import Cinema
 from app.models.seat import Seat
 from app.models.enums import TicketStatus
+from app.models.order import Order
+from pydantic import BaseModel
 from app.schemas.ticket import TicketResponse
 from app.routers.auth import get_current_active_user
 
@@ -96,5 +98,104 @@ async def get_ticket(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Ticket with id {ticket_id} not found"
         )
+
+    return ticket
+
+
+class ValidateTicketRequest(BaseModel):
+    qr_code: str
+
+
+@router.post("/validate")
+async def validate_ticket(
+    request_data: ValidateTicketRequest,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Validate a ticket by QR code - for admin/controller use."""
+    qr_code = request_data.qr_code
+    if not qr_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="QR code is required"
+        )
+
+    # Verify user has admin rights
+    if current_user.role not in [UserRoles.ADMIN, UserRoles.SUPER_ADMIN, UserRoles.STAFF]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins and staff can validate tickets"
+        )
+
+    # Find ticket by QR code
+    result = await db.execute(
+        select(Ticket)
+        .options(selectinload(Ticket.session).selectinload(Session.film))
+        .options(selectinload(Ticket.seat))
+        .filter(Ticket.qr_code == qr_code)
+    )
+    ticket = result.scalar_one_or_none()
+
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found"
+        )
+
+    # Get order info for the response
+    result = await db.execute(
+        select(Order).filter(Order.id == ticket.order_id)
+    )
+    order = result.scalar_one_or_none()
+
+    return {
+        "is_valid": ticket.status != TicketStatus.USED,
+        "ticket": TicketResponse.model_validate(ticket),
+        "order": {
+            "id": order.id if order else None,
+            "order_number": order.order_number if order else None,
+            "user_id": order.user_id if order else None,
+        } if order else None,
+        "message": "Ticket is valid" if ticket.status != TicketStatus.USED else "Ticket already used"
+    }
+
+
+@router.post("/{ticket_id}/use")
+async def mark_ticket_as_used(
+    ticket_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark a ticket as used - for admin/controller use."""
+    # Verify user has admin rights
+    if current_user.role not in [UserRoles.ADMIN, UserRoles.SUPER_ADMIN, UserRoles.STAFF]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins and staff can mark tickets as used"
+        )
+
+    # Get the ticket
+    result = await db.execute(
+        select(Ticket).filter(Ticket.id == ticket_id)
+    )
+    ticket = result.scalar_one_or_none()
+
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found"
+        )
+
+    # Check if ticket is already used
+    if ticket.status == TicketStatus.USED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ticket already used"
+        )
+
+    # Update the ticket status to used
+    ticket.status = TicketStatus.USED
+    await db.commit()
+    await db.refresh(ticket)
 
     return ticket

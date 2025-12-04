@@ -135,7 +135,7 @@ async def main():
         print("\n" + "=" * 70)
 
         if success:
-            print("✓ DATABASE INITIALIZATION COMPLETED SUCCESSFULLY!")
+            print("✓ DATABASE INITIALIZATION completed SUCCESSFULLY!")
             print("=" * 70)
             print("\nNext steps:")
             print("  1. Run 'python seed.py' to populate database with test data")

@@ -33,13 +33,13 @@ const PaymentPage = () => {
     const { id: orderId } = useParams();
     const navigate = useNavigate();
     const { user } = useAuth();
-    
+
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [paymentLoading, setPaymentLoading] = useState(false);
     const [error, setError] = useState(null);
     const [paymentSuccess, setPaymentSuccess] = useState(false);
-    
+
     // Данные формы оплаты
     const [paymentData, setPaymentData] = useState({
         card_number: "",
@@ -59,13 +59,13 @@ const PaymentPage = () => {
             setLoading(true);
             const orderDetails = await paymentsAPI.getPaymentDetails(orderId);
             setOrder(orderDetails);
-            
+
             // Устанавливаем сумму к оплате
-            setPaymentData(prev => ({
+            setPaymentData((prev) => ({
                 ...prev,
-                amount: orderDetails.final_amount
+                amount: orderDetails.final_amount,
             }));
-            
+
             setError(null);
         } catch (err) {
             console.error("Failed to load order details:", err);
@@ -77,17 +77,20 @@ const PaymentPage = () => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setPaymentData(prev => ({
+        setPaymentData((prev) => ({
             ...prev,
-            [name]: value
+            [name]: value,
         }));
     };
 
     const validateCardNumber = (number) => {
-        const cleanNumber = number.replace(/\s/g, '');
+        const cleanNumber = number.replace(/\s/g, "");
 
         // Проверяем специальные тестовые карты
-        if (cleanNumber === "9999888877776666" || cleanNumber === "5555444433332222") {
+        if (
+            cleanNumber === "9999888877776666" ||
+            cleanNumber === "5555444433332222"
+        ) {
             return true; // Специальные карты всегда проходят валидацию
         }
 
@@ -98,14 +101,14 @@ const PaymentPage = () => {
     const validateExpiryDate = (date) => {
         // Проверяем формат MM/YY
         if (!/^\d{2}\/\d{2}$/.test(date)) return false;
-        const [month, year] = date.split('/').map(Number);
+        const [month, year] = date.split("/").map(Number);
         const currentYear = new Date().getFullYear() % 100;
         const currentMonth = new Date().getMonth() + 1;
-        
+
         if (year < currentYear) return false;
         if (year === currentYear && month < currentMonth) return false;
         if (month < 1 || month > 12) return false;
-        
+
         return true;
     };
 
@@ -115,23 +118,23 @@ const PaymentPage = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         // Валидация данных карты
         if (!validateCardNumber(paymentData.card_number)) {
             setError("Неверный номер карты. Должно быть 16 цифр.");
             return;
         }
-        
+
         if (!validateExpiryDate(paymentData.expiry_date)) {
             setError("Неверная дата окончания. Используйте формат ММ/ГГ.");
             return;
         }
-        
+
         if (!validateCvv(paymentData.cvv)) {
             setError("Неверный CVV. Должно быть 3-4 цифры.");
             return;
         }
-        
+
         // if (!paymentData.cardholder_name.trim()) {
         //     setError("Укажите имя держателя карты.");
         //     return;
@@ -140,18 +143,21 @@ const PaymentPage = () => {
         try {
             setPaymentLoading(true);
             setError(null);
-            
+
             // Подготовка данных для оплаты
             const paymentPayload = {
                 amount: order?.final_amount,
-                payment_method: "card",
+                payment_method: "CARD",
                 card_number: paymentData.card_number,
                 card_expiry: paymentData.expiry_date,
                 card_cvv: paymentData.cvv,
             };
-            
-            const result = await paymentsAPI.processPayment(orderId, paymentPayload);
-            
+
+            const result = await paymentsAPI.processPayment(
+                orderId,
+                paymentPayload
+            );
+
             if (result.status === "paid") {
                 setPaymentSuccess(true);
                 // Немедленно перенаправляем на страницу заказов (без задержки или с короткой задержкой)
@@ -163,7 +169,9 @@ const PaymentPage = () => {
             }
         } catch (err) {
             console.error("Payment failed:", err);
-            setError(err.response?.data?.detail || "Ошибка при обработке платежа");
+            setError(
+                err.response?.data?.detail || "Ошибка при обработке платежа"
+            );
         } finally {
             setPaymentLoading(false);
         }
@@ -183,23 +191,37 @@ const PaymentPage = () => {
 
     if (paymentSuccess) {
         return (
-            <Container maxWidth="sm" sx={{ py: 6, textAlign: 'center' }}>
-                <Paper 
-                    sx={{ 
-                        p: 4, 
-                        background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)',
-                        border: '2px solid rgba(70, 211, 105, 0.3)',
+            <Container
+                maxWidth="sm"
+                sx={{ py: 6, textAlign: "center" }}
+            >
+                <Paper
+                    sx={{
+                        p: 4,
+                        background:
+                            "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+                        border: "2px solid rgba(70, 211, 105, 0.3)",
                     }}
                 >
-                    <CheckIcon sx={{ fontSize: 80, color: '#46d369', mb: 2 }} />
-                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 2, color: '#46d369' }}>
+                    <CheckIcon sx={{ fontSize: 80, color: "#46d369", mb: 2 }} />
+                    <Typography
+                        variant="h4"
+                        sx={{ fontWeight: 700, mb: 2, color: "#46d369" }}
+                    >
                         Оплата прошла успешно!
                     </Typography>
-                    <Typography variant="body1" sx={{ mb: 3, color: 'text.secondary' }}>
-                        Ваш заказ #{order?.order_number} оплачен. Заказ доступен в разделе "Мои заказы".
+                    <Typography
+                        variant="body1"
+                        sx={{ mb: 3, color: "text.secondary" }}
+                    >
+                        Ваш заказ #{order?.order_number} оплачен. Заказ доступен
+                        в разделе "Мои заказы".
                     </Typography>
                     <CircularProgress />
-                    <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                    <Typography
+                        variant="body2"
+                        sx={{ mt: 2, color: "text.secondary" }}
+                    >
                         Перенаправление через несколько секунд...
                     </Typography>
                 </Paper>
@@ -208,13 +230,17 @@ const PaymentPage = () => {
     }
 
     return (
-        <Container maxWidth="md" sx={{ py: 4 }}>
+        <Container
+            maxWidth="md"
+            sx={{ py: 4 }}
+        >
             <Typography
                 variant="h4"
                 sx={{
                     fontWeight: 700,
                     mb: 4,
-                    background: "linear-gradient(135deg, #e50914 0%, #ffd700 100%)",
+                    background:
+                        "linear-gradient(135deg, #e50914 0%, #ffd700 100%)",
                     WebkitBackgroundClip: "text",
                     WebkitTextFillColor: "transparent",
                 }}
@@ -223,87 +249,177 @@ const PaymentPage = () => {
             </Typography>
 
             {error && (
-                <Alert severity="error" sx={{ mb: 3 }}>
+                <Alert
+                    severity="error"
+                    sx={{ mb: 3 }}
+                >
                     {error}
                 </Alert>
             )}
 
-            <Grid container spacing={4}>
+            <Grid
+                container
+                spacing={4}
+            >
                 {/* Информация о заказе */}
-                <Grid item xs={12} md={6}>
+                <Grid
+                    item
+                    xs={12}
+                    md={6}
+                >
                     <Paper
                         sx={{
                             p: 3,
-                            background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)',
-                            border: '1px solid rgba(229, 9, 20, 0.2)',
+                            background:
+                                "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+                            border: "1px solid rgba(229, 9, 20, 0.2)",
                         }}
                     >
-                        <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
-                            <InfoIcon sx={{ mr: 1, color: '#ffd700' }} />
+                        <Typography
+                            variant="h6"
+                            sx={{
+                                fontWeight: 600,
+                                mb: 2,
+                                display: "flex",
+                                alignItems: "center",
+                            }}
+                        >
+                            <InfoIcon sx={{ mr: 1, color: "#ffd700" }} />
                             Информация о заказе
                         </Typography>
-                        
+
                         <Box sx={{ mb: 2 }}>
-                            <Typography variant="body2" color="text.secondary">Номер заказа</Typography>
-                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                            <Typography
+                                variant="body2"
+                                color="text.secondary"
+                            >
+                                Номер заказа
+                            </Typography>
+                            <Typography
+                                variant="body1"
+                                sx={{ fontWeight: 600 }}
+                            >
                                 {order?.order_number}
                             </Typography>
                         </Box>
-                        
+
                         <Box sx={{ mb: 2 }}>
-                            <Typography variant="body2" color="text.secondary">Дата создания</Typography>
-                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                {order?.created_at ? new Date(order.created_at).toLocaleString('ru-RU') : 'N/A'}
+                            <Typography
+                                variant="body2"
+                                color="text.secondary"
+                            >
+                                Дата создания
+                            </Typography>
+                            <Typography
+                                variant="body1"
+                                sx={{ fontWeight: 600 }}
+                            >
+                                {order?.created_at
+                                    ? new Date(order.created_at).toLocaleString(
+                                          "ru-RU"
+                                      )
+                                    : "N/A"}
                             </Typography>
                         </Box>
-                        
+
                         <Divider sx={{ my: 2 }} />
-                        
-                        <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Состав заказа</Typography>
+
+                        <Typography
+                            variant="h6"
+                            sx={{ fontWeight: 600, mb: 2 }}
+                        >
+                            Состав заказа
+                        </Typography>
 
                         {/* Билеты */}
                         {order?.tickets?.map((ticket, index) => (
-                            <Box key={ticket.id} sx={{ mb: 1, pl: 2 }}>
+                            <Box
+                                key={ticket.id}
+                                sx={{ mb: 1, pl: 2 }}
+                            >
                                 <Typography variant="body2">
-                                    Билет #{index + 1}: {ticket.session?.film?.title || 'Фильм'} -
-                                    Ряд {ticket.seat?.row_number}, Место {ticket.seat?.seat_number}
+                                    Билет #{index + 1}:{" "}
+                                    {ticket.session?.film?.title || "Фильм"} -
+                                    Ряд {ticket.seat?.row_number}, Место{" "}
+                                    {ticket.seat?.seat_number}
                                 </Typography>
                             </Box>
                         ))}
 
                         {/* Товары из кинобара */}
                         {order?.concession_preorders?.map((preorder, index) => (
-                            <Box key={preorder.id} sx={{ mb: 1, pl: 2 }}>
+                            <Box
+                                key={preorder.id}
+                                sx={{ mb: 1, pl: 2 }}
+                            >
                                 <Typography variant="body2">
-                                    Товар #{index + 1}: {preorder.concession_item?.name || 'Неизвестный товар'} -
-                                    {preorder.quantity} шт. × {preorder.unit_price.toFixed(2)} ₽
+                                    Товар #{index + 1}:{" "}
+                                    {preorder.concession_item?.name ||
+                                        "Неизвестный товар"}{" "}
+                                    -{preorder.quantity} шт. ×{" "}
+                                    {preorder.unit_price.toFixed(2)} ₽
                                 </Typography>
                             </Box>
                         ))}
 
-                        {!order?.tickets?.length && !order?.concession_preorders?.length && "Пустой заказ"}
+                        {!order?.tickets?.length &&
+                            !order?.concession_preorders?.length &&
+                            "Пустой заказ"}
 
                         <Divider sx={{ my: 2 }} />
 
-                        <Box sx={{ mb: 1, display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography variant="body1">Сумма заказа:</Typography>
-                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                        <Box
+                            sx={{
+                                mb: 1,
+                                display: "flex",
+                                justifyContent: "space-between",
+                            }}
+                        >
+                            <Typography variant="body1">
+                                Сумма заказа:
+                            </Typography>
+                            <Typography
+                                variant="body1"
+                                sx={{ fontWeight: 600 }}
+                            >
                                 {order?.total_amount.toFixed(2)} ₽
                             </Typography>
                         </Box>
 
-                        <Box sx={{ mb: 1, display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography variant="body2" color="text.secondary">Скидка:</Typography>
-                            <Typography variant="body2" color="text.secondary">
+                        <Box
+                            sx={{
+                                mb: 1,
+                                display: "flex",
+                                justifyContent: "space-between",
+                            }}
+                        >
+                            <Typography
+                                variant="body2"
+                                color="text.secondary"
+                            >
+                                Скидка:
+                            </Typography>
+                            <Typography
+                                variant="body2"
+                                color="text.secondary"
+                            >
                                 -{order?.discount_amount.toFixed(2)} ₽
                             </Typography>
                         </Box>
 
                         <Divider sx={{ my: 1 }} />
 
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Box
+                            sx={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                            }}
+                        >
                             <Typography variant="h6">Итого:</Typography>
-                            <Typography variant="h6" sx={{ fontWeight: 700, color: '#46d369' }}>
+                            <Typography
+                                variant="h6"
+                                sx={{ fontWeight: 700, color: "#46d369" }}
+                            >
                                 {order?.final_amount.toFixed(2)} ₽
                             </Typography>
                         </Box>
@@ -311,19 +427,32 @@ const PaymentPage = () => {
                 </Grid>
 
                 {/* Форма оплаты */}
-                <Grid item xs={12} md={6}>
+                <Grid
+                    item
+                    xs={12}
+                    md={6}
+                >
                     <Paper
                         sx={{
                             p: 3,
-                            background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)',
-                            border: '1px solid rgba(229, 9, 20, 0.2)',
+                            background:
+                                "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+                            border: "1px solid rgba(229, 9, 20, 0.2)",
                         }}
                     >
-                        <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: 'flex', alignItems: 'center' }}>
-                            <CreditCardIcon sx={{ mr: 1, color: '#e50914' }} />
+                        <Typography
+                            variant="h6"
+                            sx={{
+                                fontWeight: 600,
+                                mb: 3,
+                                display: "flex",
+                                alignItems: "center",
+                            }}
+                        >
+                            <CreditCardIcon sx={{ mr: 1, color: "#e50914" }} />
                             Данные карты
                         </Typography>
-                        
+
                         <form onSubmit={handleSubmit}>
                             <TextField
                                 fullWidth
@@ -336,10 +465,10 @@ const PaymentPage = () => {
                                 sx={{ mb: 2 }}
                                 InputProps={{
                                     sx: {
-                                        background: '#2a2a2a',
-                                        '& input': {
-                                            letterSpacing: '1px'
-                                        }
+                                        background: "#2a2a2a",
+                                        "& input": {
+                                            letterSpacing: "1px",
+                                        },
                                     },
                                     // endAdornment: (
                                     //     <Button
@@ -358,9 +487,15 @@ const PaymentPage = () => {
                                 9999 8888 7777 6666 (бесконечный баланс),
                                 5555 4444 3333 2222 (только для заказов на 1500 ₽)
                             </Typography> */}
-                            
-                            <Grid container spacing={2}>
-                                <Grid item xs={6}>
+
+                            <Grid
+                                container
+                                spacing={2}
+                            >
+                                <Grid
+                                    item
+                                    xs={6}
+                                >
                                     <TextField
                                         fullWidth
                                         label="Срок действия"
@@ -371,11 +506,14 @@ const PaymentPage = () => {
                                         inputProps={{ maxLength: 5 }}
                                         sx={{ mb: 2 }}
                                         InputProps={{
-                                            sx: { background: '#2a2a2a' }
+                                            sx: { background: "#2a2a2a" },
                                         }}
                                     />
                                 </Grid>
-                                <Grid item xs={6}>
+                                <Grid
+                                    item
+                                    xs={6}
+                                >
                                     <TextField
                                         fullWidth
                                         label="CVV"
@@ -386,12 +524,12 @@ const PaymentPage = () => {
                                         inputProps={{ maxLength: 4 }}
                                         sx={{ mb: 2 }}
                                         InputProps={{
-                                            sx: { background: '#2a2a2a' }
+                                            sx: { background: "#2a2a2a" },
                                         }}
                                     />
                                 </Grid>
                             </Grid>
-                            
+
                             <TextField
                                 fullWidth
                                 label="Имя держателя карты"
@@ -401,10 +539,10 @@ const PaymentPage = () => {
                                 placeholder="Иван Иванов"
                                 sx={{ mb: 3 }}
                                 InputProps={{
-                                    sx: { background: '#2a2a2a' }
+                                    sx: { background: "#2a2a2a" },
                                 }}
                             />
-                            
+
                             <Button
                                 type="submit"
                                 fullWidth
@@ -426,7 +564,10 @@ const PaymentPage = () => {
                             >
                                 {paymentLoading ? (
                                     <>
-                                        <CircularProgress size={20} sx={{ mr: 1 }} />
+                                        <CircularProgress
+                                            size={20}
+                                            sx={{ mr: 1 }}
+                                        />
                                         Обработка платежа...
                                     </>
                                 ) : (
@@ -435,18 +576,24 @@ const PaymentPage = () => {
                             </Button>
                         </form>
                     </Paper>
-                    
+
                     {/* Информация о безопасности */}
                     <Paper
                         sx={{
                             p: 2,
                             mt: 2,
-                            background: 'rgba(30, 30, 30, 0.7)',
-                            border: '1px solid rgba(70, 211, 105, 0.2)',
+                            background: "rgba(30, 30, 30, 0.7)",
+                            border: "1px solid rgba(70, 211, 105, 0.2)",
                         }}
                     >
-                        <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
-                            <CheckIcon sx={{ fontSize: 16, mr: 1, color: '#46d369' }} />
+                        <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ display: "flex", alignItems: "center" }}
+                        >
+                            <CheckIcon
+                                sx={{ fontSize: 16, mr: 1, color: "#46d369" }}
+                            />
                             Все данные передаются по защищенному соединению
                         </Typography>
                     </Paper>

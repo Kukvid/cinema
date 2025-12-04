@@ -103,3 +103,8 @@ class PaymentResponse(BaseModel):
     payment_method: str
     transaction_id: Optional[str] = None
     message: str
+
+class OrderCountsResponse(BaseModel):
+    active: int
+    past: int
+    total: int

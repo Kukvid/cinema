@@ -94,7 +94,7 @@ async def create_roles(db: AsyncSession):
         roles.append(role)
 
     await db.flush()
-    print(f"   Created {len(roles)} roles")
+    print(f"   created {len(roles)} roles")
     return roles
 
 
@@ -142,7 +142,7 @@ async def create_cinemas(db: AsyncSession):
         cinemas.append(cinema)
 
     await db.flush()
-    print(f"   Created {len(cinemas)} cinemas")
+    print(f"   created {len(cinemas)} cinemas")
     return cinemas
 
 
@@ -190,7 +190,7 @@ async def create_halls_and_seats(db: AsyncSession, cinemas: list):
 
             await db.flush()
 
-    print(f"   Created {len(halls)} halls and {len(seats)} seats")
+    print(f"   created {len(halls)} halls and {len(seats)} seats")
     return halls, seats
 
 
@@ -221,7 +221,7 @@ async def create_genres(db: AsyncSession):
         genres.append(genre)
 
     await db.flush()
-    print(f"   Created {len(genres)} genres")
+    print(f"   created {len(genres)} genres")
     return genres
 
 
@@ -1275,7 +1275,7 @@ async def create_films(db: AsyncSession, genres: list):
         films.append(film)
 
     await db.flush()
-    print(f"   Created {len(films)} films")
+    print(f"   created {len(films)} films")
     return films
 
 
@@ -1320,7 +1320,7 @@ async def create_distributors(db: AsyncSession):
         distributors.append(distributor)
 
     await db.flush()
-    print(f"   Created {len(distributors)} distributors")
+    print(f"   created {len(distributors)} distributors")
     return distributors
 
 
@@ -1362,7 +1362,7 @@ async def create_rental_contracts(db: AsyncSession, films: list, distributors: l
         contract_num += 1
 
     await db.flush()
-    print(f"   Created {len(contracts)} rental contracts")
+    print(f"   created {len(contracts)} rental contracts")
     return contracts
 
 
@@ -1487,7 +1487,7 @@ async def create_users(db: AsyncSession, roles: list, cinemas: list):
         users.append(user)
 
     await db.flush()
-    print(f"   Created {len(users)} users")
+    print(f"   created {len(users)} users")
     return users
 
 
@@ -1507,7 +1507,7 @@ async def create_bonus_accounts(db: AsyncSession, users: list):
         bonus_accounts.append(bonus_account)
 
     await db.flush()
-    print(f"   Created {len(bonus_accounts)} bonus accounts")
+    print(f"   created {len(bonus_accounts)} bonus accounts")
     return bonus_accounts
 
 
@@ -1572,7 +1572,7 @@ async def create_sessions(db: AsyncSession, films: list, halls: list):
                 sessions.append(session)
 
     await db.flush()
-    print(f"   Created {len(sessions)} sessions")
+    print(f"   created {len(sessions)} sessions")
     return sessions
 
 
@@ -1673,7 +1673,7 @@ async def create_promocodes(db: AsyncSession):
         promocodes.append(promocode)
 
     await db.flush()
-    print(f"   Created {len(promocodes)} promocodes")
+    print(f"   created {len(promocodes)} promocodes")
     return promocodes
 
 
@@ -1711,7 +1711,7 @@ async def create_food_categories(db: AsyncSession):
         categories.append(category)
 
     await db.flush()
-    print(f"   Created {len(categories)} food categories")
+    print(f"   created {len(categories)} food categories")
     return categories
 
 
@@ -1811,7 +1811,7 @@ async def create_concession_items(db: AsyncSession, cinemas: list, categories: l
             items.append(item)
 
     await db.flush()
-    print(f"   Created {len(items)} concession items")
+    print(f"   created {len(items)} concession items")
     return items
 
 
@@ -1851,7 +1851,7 @@ async def create_orders_and_tickets(db: AsyncSession, users: list, sessions: lis
             total_amount=Decimal("0.00"),
             discount_amount=Decimal("0.00"),
             final_amount=Decimal("0.00"),
-            status=OrderStatus.PAID,
+            status=OrderStatus.paid,
         )
         db.add(order)
         await db.flush()
@@ -1915,7 +1915,7 @@ async def create_orders_and_tickets(db: AsyncSession, users: list, sessions: lis
                         quantity=quantity,
                         unit_price=item.price,
                         total_price=item.price * quantity,
-                        status=PreorderStatus.COMPLETED,
+                        status=PreorderStatus.completed,
                     )
                     db.add(preorder)
                     concession_preorders.append(preorder)
@@ -1978,11 +1978,11 @@ async def create_orders_and_tickets(db: AsyncSession, users: list, sessions: lis
         order_num += 1
 
     await db.flush()
-    print(f"   Created {len(orders)} orders")
-    print(f"   Created {len(tickets)} tickets")
-    print(f"   Created {len(payments)} payments")
-    print(f"   Created {len(concession_preorders)} concession preorders")
-    print(f"   Created {len(bonus_transactions)} bonus transactions")
+    print(f"   created {len(orders)} orders")
+    print(f"   created {len(tickets)} tickets")
+    print(f"   created {len(payments)} payments")
+    print(f"   created {len(concession_preorders)} concession preorders")
+    print(f"   created {len(bonus_transactions)} bonus transactions")
 
     return orders, tickets, payments
 
@@ -2019,7 +2019,7 @@ async def seed_all():
             await db.commit()
 
             print("\n" + "=" * 60)
-            print("SEED COMPLETED SUCCESSFULLY!")
+            print("SEED completed SUCCESSFULLY!")
             print("=" * 60)
             print("\nDatabase Statistics:")
             print(f"  - Roles: {len(roles)}")

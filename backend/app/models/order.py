@@ -17,7 +17,7 @@ class Order(Base):
     total_amount = Column(DECIMAL(12, 2), nullable=False)
     discount_amount = Column(DECIMAL(8, 2), default=0.00)
     final_amount = Column(DECIMAL(12, 2), nullable=False)
-    status = Column(SQLEnum(OrderStatus), default=OrderStatus.CREATED, nullable=False)
+    status = Column(SQLEnum(OrderStatus), default=OrderStatus.created, nullable=False)
     qr_code = Column(String(2000), nullable=True)
 
     # Relationships

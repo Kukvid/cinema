@@ -39,6 +39,10 @@ import SessionManagement from './pages/admin/SessionManagement';
 import ReportManagement from './pages/admin/ReportManagement';
 import ConcessionManagement from './pages/admin/ConcessionManagement';
 
+// Staff Pages
+import ControllerPage from './pages/admin/ControllerPage';
+import ConcessionStaffPage from './pages/admin/ConcessionStaffPage';
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
@@ -222,6 +226,24 @@ function App() {
                 element={
                   <PrivateRoute requireAdmin>
                     <ConcessionManagement />
+                  </PrivateRoute>
+                }
+              />
+
+              {/* Staff Protected Routes */}
+              <Route
+                path="/controller"
+                element={
+                  <PrivateRoute requireStaff>
+                    <ControllerPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/concession-staff"
+                element={
+                  <PrivateRoute requireStaff>
+                    <ConcessionStaffPage />
                   </PrivateRoute>
                 }
               />

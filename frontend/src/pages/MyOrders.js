@@ -44,12 +44,15 @@ import {
     AccessTime as TimeIcon,
     Place as PlaceIcon,
     EventSeat as SeatIcon,
+    Movie as MovieIcon,
+    AccessTime as AccessTimeIcon,
 } from "@mui/icons-material";
 import { format, parseISO, isPast } from "date-fns";
 import { ru } from "date-fns/locale";
 import Loading from "../components/Loading";
 import { bookingsAPI } from "../api/bookings";
 import { paymentsAPI } from "../api/payments";
+import { ordersAPI } from "../api/orders";
 
 const MyOrders = () => {
     const [activeOrders, setActiveOrders] = useState([]);
@@ -58,12 +61,17 @@ const MyOrders = () => {
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState(null);
     const [tabValue, setTabValue] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
+    const [hasMoreActive, setHasMoreActive] = useState(true);
+    const [hasMorePast, setHasMorePast] = useState(true);
     const [activeCount, setActiveCount] = useState(0);
     const [pastCount, setPastCount] = useState(0);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [orderDetails, setOrderDetails] = useState(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
+    const [returningOrder, setReturningOrder] = useState(null);
+    const [returningLoading, setReturningLoading] = useState(false);
+    const [returnConfirmationOpen, setReturnConfirmationOpen] = useState(false);
+    const [orderToReturn, setOrderToReturn] = useState(null);
 
     // Для бесконечной прокрутки
     const activeSkipRef = useRef(0);
@@ -85,13 +93,13 @@ const MyOrders = () => {
         }
     };
 
-    const isOrderPast = (order) => {
-        return (
-            order.status === "cancelled" ||
-            order.status === "completed" ||
-            order.status === "used"
-        );
-    };
+    // const isOrderPast = (order) => {
+    //     return (
+    //         order.status === "cancelled" ||
+    //         order.status === "completed" ||
+    //         order.status === "used"
+    //     );
+    // };
 
     const loadOrders = async (skip = 0, type = "active", append = false) => {
         if (loadingMore && append) return;
@@ -107,45 +115,38 @@ const MyOrders = () => {
                 setLoadingMore(true);
             }
 
-            const response = await bookingsAPI.getMyBookingsPaginated(skip, LIMIT);
+            let response;
+            if (type === "active") {
+                response = await ordersAPI.getMyActiveOrders(skip, LIMIT);
+            } else {
+                response = await ordersAPI.getMyPastOrders(skip, LIMIT);
+            }
 
-            // Filter orders based on status
             const orders = response;
-            const activeOrdersList = orders.filter(
-                (order) =>
-                    order.status !== "cancelled" &&
-                    order.status !== "used" &&
-                    !isOrderPast(order)
-            );
-            const pastOrdersList = orders.filter(
-                (order) =>
-                    order.status === "cancelled" ||
-                    order.status === "used" ||
-                    isOrderPast(order)
-            );
 
             if (type === "active") {
                 if (append) {
-                    setActiveOrders((prev) => [...prev, ...activeOrdersList]);
+                    setActiveOrders((prev) => [...prev, ...orders]);
                 } else {
-                    setActiveOrders(activeOrdersList);
-                    setActiveCount(activeOrdersList.length);
-
+                    setActiveOrders(orders);
                 }
-                // Если получили меньше, чем лимит, значит данных больше нет
+                // If we got fewer orders than the limit, it means no more data
                 if (orders.length < LIMIT) {
-                    setHasMore(false);
+                    setHasMoreActive(false);
+                } else {
+                    setHasMoreActive(true); // Reset has more to true when loading new data
                 }
             } else {
                 if (append) {
-                    setPastOrders((prev) => [...prev, ...pastOrdersList]);
+                    setPastOrders((prev) => [...prev, ...orders]);
                 } else {
-                    setPastOrders(pastOrdersList);
-                    setPastCount(pastOrdersList.length);
+                    setPastOrders(orders);
                 }
-                // Если получили меньше, чем лимит, значит данных больше нет
+                // If we got fewer orders than the limit, it means no more data
                 if (orders.length < LIMIT) {
-                    setHasMore(false);
+                    setHasMorePast(false);
+                } else {
+                    setHasMorePast(true); // Reset has more to true when loading new data
                 }
             }
 
@@ -163,7 +164,7 @@ const MyOrders = () => {
     };
 
     const loadMoreOrders = useCallback(() => {
-        if (loadingMore || !hasMore) return;
+        if (loadingMore || (tabValue === 0 ? !hasMoreActive : !hasMorePast)) return;
 
         if (tabValue === 0) {
             // Загрузка активных заказов
@@ -176,12 +177,16 @@ const MyOrders = () => {
             pastSkipRef.current = nextSkip;
             loadOrders(nextSkip, "past", true);
         }
-    }, [tabValue, loadingMore, hasMore, activeSkip, pastSkip]);
+    }, [tabValue, loadingMore, hasMoreActive, hasMorePast, activeSkip, pastSkip]);
 
     // Наблюдатель для бесконечной прокрутки
     const lastOrderElementRef = useCallback(
         (node) => {
-            if (loadingMore || !hasMore) return;
+            if (loadingMore) return;
+
+            const shouldLoadMore = tabValue === 0 ? hasMoreActive : hasMorePast;
+            if (!shouldLoadMore) return;
+
             if (observer.current) observer.current.disconnect();
 
             observer.current = new IntersectionObserver((entries) => {
@@ -192,40 +197,42 @@ const MyOrders = () => {
 
             if (node) observer.current.observe(node);
         },
-        [loadMoreOrders]
+        [loadMoreOrders, tabValue, hasMoreActive, hasMorePast, loadingMore]
     );
 
-    // Добавьте ЭТОТ useEffect для первоначальной загрузки только активных заказов
     useEffect(() => {
-        // Загружаем активные заказы при монтировании компонента
-        loadOrders(0, "active", false);
-         loadOrders(0, "past", false);
+        // Загружаем счетчики и активные заказы параллельно
+        Promise.all([
+            loadOrdersCounts(),
+            loadOrders(0, "active", false)
+        ]).catch(error => {
+            console.error('Error loading initial data:', error);
+            setError('Не удалось загрузить начальные данные');
+        });
     }, []); // Пустой массив = выполнится только один раз при монтировании
 
     useEffect(() => {
         // Сбрасываем пропуски при смене вкладки и загружаем заказы
         if (tabValue === 0) {
+            // Switching to active orders tab
+            activeSkipRef.current = 0;
             if (activeOrders.length === 0) {
-                // Если активные заказы еще не были загружены, загрузим их
-                activeSkipRef.current = 0;
+                // If active orders haven't been loaded yet, load them
                 setActiveOrders([]);
-                setHasMore(true); // Сбрасываем флаг, чтобы можно было загружать больше
-                loadOrders(0, "active", false);
-            } else {
-                // Если уже загружены, обновляем только пропуск
-                activeSkipRef.current = 0;
+                setHasMoreActive(true); // Reset flag to allow loading more
             }
+            // Load active orders when switching to this tab
+            loadOrders(0, "active", false);
         } else {
+            // Switching to past orders tab
+            pastSkipRef.current = 0;
             if (pastOrders.length === 0) {
-                // Если прошедшие заказы еще не были загружены, загрузим их
-                pastSkipRef.current = 0;
+                // If past orders haven't been loaded yet, load them
                 setPastOrders([]);
-                setHasMore(true); // Сбрасываем флаг, чтобы можно было загружать больше
-                loadOrders(0, "past", false);
-            } else {
-                // Если уже загружены, обновляем только пропуск
-                pastSkipRef.current = 0;
+                setHasMorePast(true); // Reset flag to allow loading more
             }
+            // Load past orders when switching to this tab
+            loadOrders(0, "past", false);
         }
     }, [tabValue]);
 
@@ -234,7 +241,7 @@ const MyOrders = () => {
         setLoadingDetails(true);
         // We'll use the payment details API only when the modal opens, to ensure we have the most up-to-date details
         try {
-            const details = await paymentsAPI.getPaymentDetails(order.id);
+            const details = await ordersAPI.getOrderDetails(order.id); // Предполагаемый метод
             setOrderDetails(details);
         } catch (err) {
             console.error("Failed to load order details:", err);
@@ -243,6 +250,7 @@ const MyOrders = () => {
                 ...order,
                 tickets: order.tickets || [],
                 concession_preorders: order.concession_preorders || [],
+                qr_code: order.qr_code || null,
             });
         } finally {
             setLoadingDetails(false);
@@ -256,6 +264,18 @@ const MyOrders = () => {
         } catch (err) {
             console.error("Failed to redirect to payment:", err);
             setError("Не удалось перейти к оплате заказа");
+        }
+    };
+
+    // После функции isOrderPast, перед loadOrders
+    const loadOrdersCounts = async () => {
+        try {
+            const counts = await ordersAPI.getMyOrdersCounts();
+            setActiveCount(counts.active);
+            setPastCount(counts.past);
+        } catch (err) {
+            console.error("Failed to load orders counts:", err);
+            // Если не удалось загрузить счетчики, оставляем 0
         }
     };
 
@@ -276,26 +296,194 @@ const MyOrders = () => {
         }
     };
 
+    if (loading && displayOrders.length === 0) {
+        return <Loading message="Загрузка заказов..." />;
+    }
+
     const getStatusText = (status) => {
         switch (status) {
-            case 'paid':
-                return 'Оплачен';
-            case 'pending_payment':
-                return 'Ожидает оплаты';
-            case 'cancelled':
-                return 'Отменён';
-            case 'used':
-                return 'Использован';
-            case 'completed':
-                return 'Завершён';
+            case "paid":
+                return "Оплачен";
+            case "pending_payment":
+                return "Ожидает оплаты";
+            case "cancelled":
+                return "Отменён";
+            case "refunded":
+                return "Возвращён";
+            case "used":
+                return "Использован";
+            case "completed":
+                return "Завершён";
+            case "created":
+                return "Создан";
             default:
                 return status;
         }
     };
 
-    if (loading && displayOrders.length === 0) {
-        return <Loading message="Загрузка заказов..." />;
-    }
+    // Function to determine if order is active based on status and session time
+    const isOrderActive = (order) => {
+        // Find the earliest session datetime for this order
+        if (!order.tickets || order.tickets.length === 0) {
+            // If no tickets, consider it past if cancelled/refunded/completed
+            return !["cancelled", "refunded", "completed"].includes(order.status);
+        }
+
+        // Safely get earliest session datetime from tickets, only for tickets that have sessions
+        // Use end_datetime to match the backend logic for determining if session has ended
+        const validSessionDates = order.tickets
+            .filter(ticket => ticket.session && ticket.session.end_datetime)
+            .map(ticket => new Date(ticket.session.end_datetime));
+
+        if (validSessionDates.length === 0) {
+            // If no valid session dates, consider it past if cancelled/refunded/completed
+            return !["cancelled", "refunded", "completed"].includes(order.status);
+        }
+
+        const earliestSessionTime = new Date(Math.min(...validSessionDates));
+        const currentTime = new Date();
+
+        // Orders that are waiting for payment, paid, or completed and session hasn't ended are active
+        // Backend logic: active orders are [created, pending_payment, paid, completed] where session hasn't ended
+        const isActiveStatus = [
+            "created",
+            "pending_payment",
+            "paid",
+            "completed"
+        ].includes(order.status);
+        const sessionNotEnded = earliestSessionTime > currentTime;
+
+        return isActiveStatus && sessionNotEnded;
+    };
+
+    // Function to calculate time to session for return policy
+    const calculateTimeToSession = (order) => {
+        if (!order.tickets || order.tickets.length === 0) {
+            return null;
+        }
+
+        // Safely get earliest session datetime from tickets
+        const validSessionDates = order.tickets
+            .filter(ticket => ticket.session && ticket.session.start_datetime)
+            .map(ticket => new Date(ticket.session.start_datetime));
+
+        if (validSessionDates.length === 0) {
+            return null;
+        }
+
+        const earliestSessionTime = new Date(Math.min(...validSessionDates));
+        const currentTime = new Date();
+        const timeDiff = earliestSessionTime.getTime() - currentTime.getTime();
+
+        // Return time difference in days
+        const daysToSession = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+        return {
+            days: daysToSession,
+            time: earliestSessionTime
+        };
+    };
+
+    // Function to get return policy message based on time to session
+    const getTimeToSessionMessage = (order) => {
+        const timeInfo = calculateTimeToSession(order);
+        if (!timeInfo) return "";
+
+        if (timeInfo.days < 1) {
+            return "До сеанса менее 1 дня: можно вернуть максимум 10% от стоимости билетов";
+        } else if (timeInfo.days <= 7) {
+            return `До сеанса ${timeInfo.days} дней: можно вернуть 95% от стоимости билетов`;
+        } else {
+            return `До сеанса ${timeInfo.days} дней: можно вернуть 100% от стоимости билетов`;
+        }
+    };
+
+    const handleReturnOrder = async (orderId) => {
+        // Open confirmation dialog instead of directly processing
+        const order = displayOrders.find(o => o.id === orderId);
+        setOrderToReturn(order);
+        setReturnConfirmationOpen(true);
+    };
+
+    const handleCancelPendingOrder = async (orderId) => {
+        if (returningLoading) return;
+
+        setReturningOrder(orderId);
+        setReturningLoading(true);
+        setError(null);
+
+        try {
+            await bookingsAPI.cancelPendingOrder(orderId);
+            // Refresh order lists after cancellation
+            activeSkipRef.current = 0;
+            pastSkipRef.current = 0;
+            setHasMoreActive(true); // Reset pagination flags
+            setHasMorePast(true);
+
+            // Reload counts and refresh current tab
+            await loadOrdersCounts();
+
+            // Refresh the current tab's orders
+            if (tabValue === 0) {
+                await loadOrders(0, "active", false);
+            } else {
+                await loadOrders(0, "past", false);
+            }
+
+            // Close the modal if it was open
+            if (selectedOrder && selectedOrder.id === orderId) {
+                setSelectedOrder(null);
+                setOrderDetails(null);
+            }
+        } catch (err) {
+            console.error("Failed to cancel order:", err);
+            setError(err.response?.data?.detail || "Не удалось отменить заказ");
+        } finally {
+            setReturningOrder(null);
+            setReturningLoading(false);
+        }
+    };
+
+    const confirmReturnOrder = async () => {
+        if (!orderToReturn || returningLoading) return;
+
+        setReturningOrder(orderToReturn.id);
+        setReturningLoading(true);
+        setReturnConfirmationOpen(false);
+        setError(null);
+
+        try {
+            await bookingsAPI.returnOrder(orderToReturn.id);
+            // Refresh order lists after return
+            activeSkipRef.current = 0;
+            pastSkipRef.current = 0;
+            setHasMoreActive(true); // Reset pagination flags
+            setHasMorePast(true);
+
+            // Reload counts and refresh current tab
+            await loadOrdersCounts();
+
+            // Refresh the current tab's orders
+            if (tabValue === 0) {
+                await loadOrders(0, "active", false);
+            } else {
+                await loadOrders(0, "past", false);
+            }
+
+            // Close the modal if it was open
+            if (selectedOrder && selectedOrder.id === orderToReturn.id) {
+                setSelectedOrder(null);
+                setOrderDetails(null);
+            }
+        } catch (err) {
+            console.error("Failed to return order:", err);
+            setError(err.response?.data?.detail || "Не удалось вернуть заказ");
+        } finally {
+            setReturningOrder(null);
+            setReturningLoading(false);
+            setOrderToReturn(null);
+        }
+    };
 
     return (
         <Container
@@ -388,8 +576,12 @@ const MyOrders = () => {
                                         onClick={() => handleOrderClick(order)}
                                         formatDate={formatDate}
                                         getStatusColor={getStatusColor}
-                                        getStatusText={getStatusText} 
+                                        getStatusText={getStatusText}
                                         onPay={handlePayForOrder}
+                                        handleReturnOrder={handleReturnOrder}
+                                        handleCancelPendingOrder={handleCancelPendingOrder}
+                                        returningLoading={returningLoading}
+                                        returningOrder={returningOrder}
                                     />
                                 </Grid>
                             );
@@ -407,6 +599,9 @@ const MyOrders = () => {
                                     getStatusColor={getStatusColor}
                                     getStatusText={getStatusText}
                                     onPay={handlePayForOrder}
+                                    handleReturnOrder={handleReturnOrder}
+                                    returningLoading={returningLoading}
+                                    returningOrder={returningOrder}
                                 />
                             </Grid>
                         );
@@ -469,12 +664,88 @@ const MyOrders = () => {
                     setOrderDetails(null);
                 }}
                 onPay={handlePayForOrder}
+                handleReturnOrder={handleReturnOrder}
+                handleCancelPendingOrder={handleCancelPendingOrder}
+                returningLoading={returningLoading}
+                returningOrder={returningOrder}
             />
+
+            {/* Модальное окно подтверждения возврата */}
+            <Dialog
+                open={returnConfirmationOpen}
+                onClose={() => setReturnConfirmationOpen(false)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle sx={{
+                    background: "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+                    color: "white",
+                    fontWeight: "bold"
+                }}>
+                    Подтверждение возврата
+                </DialogTitle>
+                <DialogContent dividers>
+                    <Typography>
+                        Вы уверены, что хотите вернуть этот заказ?
+                    </Typography>
+                    {orderToReturn && (
+                        <>
+                            {calculateTimeToSession(orderToReturn) ? (
+                                <Box sx={{ mt: 2 }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {getTimeToSessionMessage(orderToReturn)}
+                                    </Typography>
+                                </Box>
+                            ) : null}
+                        </>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button
+                        onClick={() => setReturnConfirmationOpen(false)}
+                        disabled={returningLoading}
+                    >
+                        Отмена
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="error"
+                        onClick={confirmReturnOrder}
+                        disabled={returningLoading}
+                        sx={{
+                            background: "linear-gradient(135deg, #e50914 0%, #b00710 100%)",
+                            "&:hover": {
+                                background: "linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)",
+                            },
+                        }}
+                    >
+                        {returningLoading ? (
+                            <>
+                                <CircularProgress size={20} sx={{ mr: 1 }} />
+                                Обработка...
+                            </>
+                        ) : (
+                            "Вернуть заказ"
+                        )}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Container>
     );
 };
 
-const OrderCard = ({ order, onClick, formatDate, getStatusColor, getStatusText, onPay }) => {
+const OrderCard = ({
+    order,
+    onClick,
+    formatDate,
+    getStatusColor,
+    getStatusText,
+    onPay,
+    handleReturnOrder,
+    handleCancelPendingOrder,
+    returningLoading,
+    returningOrder,
+}) => {
     const isPast = order.status === "cancelled" || order.status === "used";
 
     return (
@@ -521,7 +792,9 @@ const OrderCard = ({ order, onClick, formatDate, getStatusColor, getStatusText, 
                                     Заказ #{order.order_number}
                                 </Typography>
                                 <Chip
-                                    label={getStatusText(order.status)} 
+                                    label={getStatusText(
+                                        getStatusText(order.status)
+                                    )}
                                     size="small"
                                     sx={{
                                         mt: 0.5,
@@ -571,6 +844,131 @@ const OrderCard = ({ order, onClick, formatDate, getStatusColor, getStatusText, 
                                     {formatDate(order.created_at)}
                                 </Typography>
                             </Grid>
+                            {/* Session Information */}
+                            {order.tickets && order.tickets.length > 0 && order.tickets[0].session && (
+                                <>
+                                    <Grid
+                                        item
+                                        xs={12}
+                                        sm={6}
+                                    >
+                                        <Box
+                                            sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                                mb: 1,
+                                            }}
+                                        >
+                                            <MovieIcon
+                                                sx={{ color: "#46d369", fontSize: 20 }}
+                                            />
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
+                                            >
+                                                Фильм
+                                            </Typography>
+                                        </Box>
+                                        <Typography
+                                            variant="body1"
+                                            sx={{ fontWeight: 600, ml: 3.5 }}
+                                        >
+                                            {order.tickets[0].session.film?.title || "Не указан"}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid
+                                        item
+                                        xs={12}
+                                        sm={6}
+                                    >
+                                        <Box
+                                            sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                                mb: 1,
+                                            }}
+                                        >
+                                            <PlaceIcon
+                                                sx={{ color: "#2196f3", fontSize: 20 }}
+                                            />
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
+                                            >
+                                                Кинотеатр
+                                            </Typography>
+                                        </Box>
+                                        <Typography
+                                            variant="body1"
+                                            sx={{ fontWeight: 600, ml: 3.5 }}
+                                        >
+                                            {order.tickets[0].session.cinema?.name || "Не указан"}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid
+                                        item
+                                        xs={12}
+                                        sm={6}
+                                    >
+                                        <Box
+                                            sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                                mb: 1,
+                                            }}
+                                        >
+                                            <ScheduleIcon
+                                                sx={{ color: "#ff9800", fontSize: 20 }}
+                                            />
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
+                                            >
+                                                Зал
+                                            </Typography>
+                                        </Box>
+                                        <Typography
+                                            variant="body1"
+                                            sx={{ fontWeight: 600, ml: 3.5 }}
+                                        >
+                                            {order.tickets[0].session.hall?.number ? `Зал ${order.tickets[0].session.hall.number}` : "Не указан"}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid
+                                        item
+                                        xs={12}
+                                        sm={6}
+                                    >
+                                        <Box
+                                            sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                                mb: 1,
+                                            }}
+                                        >
+                                            <AccessTimeIcon
+                                                sx={{ color: "#9c27b0", fontSize: 20 }}
+                                            />
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
+                                            >
+                                                Время сеанса
+                                            </Typography>
+                                        </Box>
+                                        <Typography
+                                            variant="body1"
+                                            sx={{ fontWeight: 600, ml: 3.5 }}
+                                        >
+                                            {order.tickets[0].session.start_datetime ? formatDate(order.tickets[0].session.start_datetime) : "Не указано"}
+                                        </Typography>
+                                    </Grid>
+                                </>
+                            )}
 
                             {order.payment && order.payment.card_last_four && (
                                 <Grid
@@ -697,9 +1095,9 @@ const OrderCard = ({ order, onClick, formatDate, getStatusColor, getStatusText, 
                             </Box>
                         </Paper>
 
-                        {order.status !== "paid" &&
-                            order.status !== "used" &&
-                            order.status !== "cancelled" && (
+                        {order.status === "pending_payment" ? (
+                            // For pending payment orders, show both Pay and Cancel buttons
+                            <>
                                 <Button
                                     variant="contained"
                                     fullWidth
@@ -707,10 +1105,10 @@ const OrderCard = ({ order, onClick, formatDate, getStatusColor, getStatusText, 
                                         mt: 2,
                                         py: 1,
                                         background:
-                                            "linear-gradient(135deg, #e50914 0%, #b00710 100%)",
+                                            "linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)", // Green for pay
                                         "&:hover": {
                                             background:
-                                                "linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)",
+                                                "linear-gradient(135deg, #66BB6A 0%, #388E3C 100%)",
                                         },
                                     }}
                                     onClick={(e) => {
@@ -720,7 +1118,102 @@ const OrderCard = ({ order, onClick, formatDate, getStatusColor, getStatusText, 
                                 >
                                     Оплатить заказ
                                 </Button>
-                            )}
+                                <Button
+                                    variant="contained"
+                                    fullWidth
+                                    disabled={
+                                        returningLoading &&
+                                        returningOrder === order.id
+                                    }
+                                    sx={{
+                                        mt: 1,
+                                        py: 1,
+                                        background:
+                                            "linear-gradient(135deg, #e50914 0%, #b00710 100%)", // Red for cancel
+                                        "&:hover": {
+                                            background:
+                                                "linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)",
+                                        },
+                                        "&:disabled": {
+                                            opacity: 0.7,
+                                        },
+                                    }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleCancelPendingOrder(order.id);
+                                    }}
+                                >
+                                    {returningLoading &&
+                                    returningOrder === order.id ? (
+                                        <CircularProgress
+                                            size={24}
+                                            color="inherit"
+                                        />
+                                    ) : (
+                                        "Отменить заказ"
+                                    )}
+                                </Button>
+                            </>
+                        ) : order.status === "created" ? (
+                            <Button
+                                variant="contained"
+                                fullWidth
+                                sx={{
+                                    mt: 2,
+                                    py: 1,
+                                    background:
+                                        "linear-gradient(135deg, #e50914 0%, #b00710 100%)",
+                                    "&:hover": {
+                                        background:
+                                            "linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)",
+                                    },
+                                }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onPay(order.id);
+                                }}
+                            >
+                                Оплатить заказ
+                            </Button>
+                        ) : (
+                            order.status === "paid" && (
+                                <Button
+                                    variant="contained"
+                                    fullWidth
+                                    disabled={
+                                        returningLoading &&
+                                        returningOrder === order.id
+                                    }
+                                    sx={{
+                                        mt: 2,
+                                        py: 1,
+                                        background:
+                                            "linear-gradient(135deg, #2196f3 0%, #1976d2 100%)",
+                                        "&:hover": {
+                                            background:
+                                                "linear-gradient(135deg, #33aaff 0%, #2196f3 100%)",
+                                        },
+                                        "&:disabled": {
+                                            opacity: 0.7,
+                                        },
+                                    }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleReturnOrder(order.id);
+                                    }}
+                                >
+                                    {returningLoading &&
+                                    returningOrder === order.id ? (
+                                        <CircularProgress
+                                            size={24}
+                                            color="inherit"
+                                        />
+                                    ) : (
+                                        "Вернуть заказ"
+                                    )}
+                                </Button>
+                            )
+                        )}
                     </Grid>
                 </Grid>
             </CardContent>
@@ -735,6 +1228,10 @@ const OrderDetailsModal = ({
     loading,
     onClose,
     onPay,
+    handleReturnOrder,
+    handleCancelPendingOrder,
+    returningLoading,
+    returningOrder,
 }) => {
     const formatDate = (dateString) => {
         try {
@@ -754,8 +1251,12 @@ const OrderDetailsModal = ({
                 return "#ffd700";
             case "cancelled":
                 return "#e50914";
+            case "refunded":
+                return "#e50914";
             case "used":
                 return "#666";
+            case "created":
+                return "#2196f3"; // blue for created
             default:
                 return "#999";
         }
@@ -763,16 +1264,20 @@ const OrderDetailsModal = ({
 
     const getStatusText = (status) => {
         switch (status) {
-            case 'paid':
-                return 'Оплачен';
-            case 'pending_payment':
-                return 'Ожидает оплаты';
-            case 'cancelled':
-                return 'Отменён';
-            case 'used':
-                return 'Использован';
-            case 'completed':
-                return 'Завершён';
+            case "paid":
+                return "Оплачен";
+            case "pending_payment":
+                return "Ожидает оплаты";
+            case "cancelled":
+                return "Отменён";
+            case "refunded":
+                return "Возвращён";
+            case "used":
+                return "Использован";
+            case "completed":
+                return "Завершён";
+            case "created":
+                return "Создан";
             default:
                 return status;
         }
@@ -834,9 +1339,7 @@ const OrderDetailsModal = ({
                                 item
                                 xs={12}
                             >
-                                <Paper
-                                    sx={{ p: 2, mb: 2}}
-                                >
+                                <Paper sx={{ p: 2, mb: 2 }}>
                                     <Typography
                                         variant="h6"
                                         sx={{ fontWeight: 600, mb: 1 }}
@@ -865,7 +1368,7 @@ const OrderDetailsModal = ({
                                                     ),
                                                 }}
                                             >
-                                                {order.status}
+                                                {getStatusText(order.status)}
                                             </Typography>
                                         </Grid>
                                         <Grid
@@ -1041,7 +1544,8 @@ const OrderDetailsModal = ({
                                                         </ListItemIcon>
                                                         <ListItemText
                                                             primary={`${ticket.session?.film?.title || "Фильм"} - Ряд ${ticket.seat?.row_number}, Место ${ticket.seat?.seat_number}`}
-                                                            secondary={`Цена: ${ticket.price} ₽ | Статус: ${ticket.status}`}
+                                                            secondary={`Цена: ${ticket.price} ₽ | `}
+                                                            // Статус: ${ticket.status}
                                                         />
                                                     </ListItem>
                                                 )
@@ -1119,34 +1623,54 @@ const OrderDetailsModal = ({
                                 <Grid
                                     item
                                     xs={12}
+                                    sx={{ textAlign: "center" }}
                                 >
-                                    <Paper sx={{ p: 2, textAlign: "center" }}>
-                                        <QrCodeIcon
+                                    <Paper
+                                        sx={{ p: 3, display: "inline-block" }}
+                                    >
+                                        <Typography
+                                            variant="h6"
                                             sx={{
-                                                fontSize: 80,
-                                                color: "#141414",
+                                                mb: 2,
+                                                fontWeight: 600,
+                                                color: "#e50914",
+                                            }}
+                                        >
+                                            QR-код заказа
+                                        </Typography>
+                                        <Box
+                                            component="img"
+                                            src={orderDetails.qr_code}
+                                            alt="QR Code"
+                                            sx={{
+                                                width: 200,
+                                                height: 200,
+                                                display: "block",
+                                                mx: "auto",
+                                                border: "1px solid #e0e0e0",
+                                                borderRadius: 1,
                                             }}
                                         />
                                         <Typography
                                             variant="body2"
-                                            sx={{ mt: 1 }}
+                                            sx={{ mt: 1, color: "#666", wordBreak: "break-all", fontFamily: "monospace" }}
                                         >
-                                            QR-код заказа
+                                            {orderDetails.qr_data || 'Номер заказа недоступен'}
                                         </Typography>
                                         <Typography
-                                            variant="caption"
-                                            sx={{ color: "#666" }}
+                                            variant="body2"
+                                            sx={{ mt: 1, color: "#666" }}
                                         >
-                                            {orderDetails.qr_code}
+                                            Отсканируйте для проверки заказа
                                         </Typography>
                                     </Paper>
                                 </Grid>
                             )}
 
-                            {/* Кнопка оплаты */}
-                            {order.status !== "paid" &&
-                                order.status !== "used" &&
-                                order.status !== "cancelled" && (
+                            {/* Кнопки оплаты, отмены и возврата */}
+                            {order.status === "pending_payment" ? (
+                                // For pending payment orders, show both Pay and Cancel buttons
+                                <>
                                     <Grid
                                         item
                                         xs={12}
@@ -1160,19 +1684,138 @@ const OrderDetailsModal = ({
                                                 fontSize: "1.1rem",
                                                 fontWeight: 600,
                                                 background:
-                                                    "linear-gradient(135deg, #e50914 0%, #b00710 100%)",
+                                                    "linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)", // Green for pay
                                                 "&:hover": {
                                                     background:
-                                                        "linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)",
+                                                        "linear-gradient(135deg, #66BB6A 0%, #388E3C 100%)",
                                                 },
                                             }}
                                             onClick={() => onPay(order.id)}
                                         >
-                                            Перейти к оплате (
-                                            {order.final_amount} ₽)
+                                            Перейти к оплате ({order.final_amount}{" "}
+                                            ₽)
                                         </Button>
                                     </Grid>
-                                )}
+                                    <Grid
+                                        item
+                                        xs={12}
+                                        sx={{ mt: 1 }}
+                                    >
+                                        <Button
+                                            variant="contained"
+                                            fullWidth
+                                            size="large"
+                                            disabled={
+                                                returningLoading &&
+                                                returningOrder === order.id
+                                            }
+                                            sx={{
+                                                py: 1.5,
+                                                fontSize: "1.1rem",
+                                                fontWeight: 600,
+                                                background:
+                                                    "linear-gradient(135deg, #e50914 0%, #b00710 100%)", // Red for cancel
+                                                "&:hover": {
+                                                    background:
+                                                        "linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)",
+                                                },
+                                                "&:disabled": {
+                                                    opacity: 0.7,
+                                                },
+                                            }}
+                                            onClick={() =>
+                                                handleCancelPendingOrder(order.id)
+                                            }
+                                        >
+                                            {returningLoading &&
+                                            returningOrder === order.id ? (
+                                                <>
+                                                    <CircularProgress
+                                                        size={24}
+                                                        sx={{ mr: 1 }}
+                                                    />
+                                                    Отмена заказа...
+                                                </>
+                                            ) : (
+                                                "Отменить заказ"
+                                            )}
+                                        </Button>
+                                    </Grid>
+                                </>
+                            ) : order.status === "created" ? (
+                                <Grid
+                                    item
+                                    xs={12}
+                                >
+                                    <Button
+                                        variant="contained"
+                                        fullWidth
+                                        size="large"
+                                        sx={{
+                                            py: 1.5,
+                                            fontSize: "1.1rem",
+                                            fontWeight: 600,
+                                            background:
+                                                "linear-gradient(135deg, #e50914 0%, #b00710 100%)",
+                                            "&:hover": {
+                                                background:
+                                                    "linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)",
+                                            },
+                                        }}
+                                        onClick={() => onPay(order.id)}
+                                    >
+                                        Перейти к оплате ({order.final_amount}{" "}
+                                        ₽)
+                                    </Button>
+                                </Grid>
+                            ) : (
+                                order.status === "paid" && (
+                                    <Grid
+                                        item
+                                        xs={12}
+                                    >
+                                        <Button
+                                            variant="contained"
+                                            fullWidth
+                                            size="large"
+                                            disabled={
+                                                returningLoading &&
+                                                returningOrder === order.id
+                                            }
+                                            sx={{
+                                                py: 1.5,
+                                                fontSize: "1.1rem",
+                                                fontWeight: 600,
+                                                background:
+                                                    "linear-gradient(135deg, #2196f3 0%, #1976d2 100%)",
+                                                "&:hover": {
+                                                    background:
+                                                        "linear-gradient(135deg, #33aaff 0%, #2196f3 100%)",
+                                                },
+                                                "&:disabled": {
+                                                    opacity: 0.7,
+                                                },
+                                            }}
+                                            onClick={() =>
+                                                handleReturnOrder(order.id)
+                                            }
+                                        >
+                                            {returningLoading &&
+                                            returningOrder === order.id ? (
+                                                <>
+                                                    <CircularProgress
+                                                        size={24}
+                                                        sx={{ mr: 1 }}
+                                                    />
+                                                    Обработка возврата...
+                                                </>
+                                            ) : (
+                                                "Вернуть заказ"
+                                            )}
+                                        </Button>
+                                    </Grid>
+                                )
+                            )}
                         </Grid>
                     </Box>
                 ) : (
