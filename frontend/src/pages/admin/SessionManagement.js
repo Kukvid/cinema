@@ -52,7 +52,7 @@ const SessionManagement = () => {
     start_datetime: new Date().toISOString().split('T')[0] + 'T' + new Date().toTimeString().substring(0, 5),
     end_datetime: new Date().toISOString().split('T')[0] + 'T' + new Date().toTimeString().substring(0, 5),
     ticket_price: 0,
-    status: 'scheduled'
+    status: 'SCHEDULED'
   });
 
   useEffect(() => {
@@ -86,7 +86,7 @@ const SessionManagement = () => {
         start_datetime: session.start_datetime ? new Date(session.start_datetime).toISOString().slice(0, 16) : '',
         end_datetime: session.end_datetime ? new Date(session.end_datetime).toISOString().slice(0, 16) : '',
         ticket_price: session.ticket_price || 0,
-        status: session.status || 'scheduled'
+        status: session.status || 'SCHEDULED'
       });
     } else {
       setEditingSession(null);
@@ -98,7 +98,7 @@ const SessionManagement = () => {
         start_datetime: nextHour.toISOString().slice(0, 16),
         end_datetime: '', // будет вычислено автоматически
         ticket_price: 0,
-        status: 'scheduled'
+        status: 'SCHEDULED'
       });
     }
     setDialogOpen(true);
@@ -113,7 +113,7 @@ const SessionManagement = () => {
       start_datetime: new Date().toISOString().split('T')[0] + 'T' + new Date().toTimeString().substring(0, 5),
       end_datetime: new Date().toISOString().split('T')[0] + 'T' + new Date().toTimeString().substring(0, 5),
       ticket_price: 0,
-      status: 'scheduled'
+      status: 'SCHEDULED'
     });
   };
 
@@ -343,10 +343,10 @@ const SessionManagement = () => {
                   value={formData.status}
                   onChange={handleInputChange}
                 >
-                  <MenuItem value="scheduled">Запланирован</MenuItem>
-                  <MenuItem value="ongoing">Идет сеанс</MenuItem>
-                  <MenuItem value="completed">Завершен</MenuItem>
-                  <MenuItem value="cancelled">Отменен</MenuItem>
+                  <MenuItem value="SCHEDULED">Запланирован</MenuItem>
+                  <MenuItem value="ONGOING">Идет сеанс</MenuItem>
+                  <MenuItem value="COMPLETED">Завершен</MenuItem>
+                  <MenuItem value="CANCELLED">Отменен</MenuItem>
                 </Select>
               </FormControl>
             </Grid>

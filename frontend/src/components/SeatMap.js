@@ -6,20 +6,22 @@ const SeatMap = ({ seats, selectedSeats, onSeatSelect }) => {
     const getSeatColor = (seat) => {
         if (seat.seat_type === "aisle") return "transparent";
         if (selectedSeats.includes(seat.id)) return "#2196f3"; // Синий - выбрано
-        if (seat.ticket_status === "paid") return "#f44336"; // Красный - оплачено
-        if (seat.ticket_status === "reserved") return "#e76118ff"; // Оранжевый - забронировано, ожидает оплаты
+        if (seat.ticket_status === "PAID") return "#f44336"; // Красный - оплачено
+        if (seat.ticket_status === "USED") return "#f44336"; // Красный - bcgjkmpjdfyj
+        if (seat.ticket_status === "RESERVED") return "#e76118ff"; // Оранжевый - забронировано, ожидает оплаты
         if (seat.is_booked) return "#f44336"; // Красный - занято (для совместимости)
-        return "#46d369"; // Зеленый - свободно (включая отмененные)
+        return "#46d369"; // Зеленый - свободно
     };
 
     const getSeatHoverColor = (seat) => {
-        if (seat.seat_type === "aisle" || seat.ticket_status === "paid" || seat.ticket_status === "reserved") return "transparent";
+        if (seat.seat_type === "AISLE" || seat.ticket_status === "PAID" || seat.ticket_status === "RESERVED" || seat.ticket_status === "USED") return "transparent";
+        if (seat.ticket_status === "CANCELLED") return "#2e7d39"; // Hover color for cancelled seats
         if (selectedSeats.includes(seat.id)) return "#1976d2";
         return "#2e7d32";
     };
 
     const handleSeatClick = (seat) => {
-        if (seat.seat_type === "aisle" || seat.ticket_status === "paid" || seat.ticket_status === "reserved") return;
+        if (seat.seat_type === "AISLE" || seat.ticket_status === "PAID" || seat.ticket_status === "RESERVED" || seat.ticket_status === "USED") return;
         onSeatSelect(seat);
     };
 
@@ -177,7 +179,7 @@ const SeatMap = ({ seats, selectedSeats, onSeatSelect }) => {
                 />
                 <Chip
                     icon={<SeatIcon sx={{ color: "#ffffffff !important" }} />}
-                    label="Оплачен"
+                    label="Занято"
                     sx={{
                         backgroundColor: "#f44336",
                         color: "#fff",

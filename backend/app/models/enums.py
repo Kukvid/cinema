@@ -2,10 +2,10 @@ from enum import Enum
 
 
 class UserRoles(str, Enum):
-    SUPER_ADMIN = 'SUPER_ADMIN'
-    ADMIN = 'ADMIN'
-    STAFF = 'STAFF'
-    USER = 'USER'
+    super_admin = 'super_admin'
+    admin = 'admin'
+    staff = 'staff'
+    user = 'user'
 
 class CinemaStatus(str, Enum):
     ACTIVE = "active"

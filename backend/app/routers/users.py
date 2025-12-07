@@ -26,7 +26,7 @@ async def get_users(
 ):
     """Get list of users with pagination and filters."""
     # Only admin users should be able to see all users
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can access user management"
@@ -130,7 +130,7 @@ async def update_user(
     db: AsyncSession = Depends(get_db)
 ):
     """Update user by ID."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can update other users"
@@ -177,7 +177,7 @@ async def delete_user(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete user by ID."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can delete other users"

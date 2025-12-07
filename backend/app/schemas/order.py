@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from app.models.enums import OrderStatus
 from .ticket import TicketCreate, TicketResponse
+from .concession import ConcessionPreorderCreate, ConcessionPreorderCreateForOrder, ConcessionPreorderResponse, ConcessionItemResponse
 
 
 # Base schema with common fields
@@ -17,6 +18,7 @@ class OrderBase(BaseModel):
 # Schema for creating an order
 class OrderCreate(BaseModel):
     tickets: List[TicketCreate] = Field(..., min_length=1, description="At least one ticket required")
+    concession_preorders: List[ConcessionPreorderCreateForOrder] = Field(default_factory=list, description="Optional concession preorders")
     total_order_amount: Decimal = Field(..., ge=0, description="Total order amount including tickets and concessions")
     promocode_code: Optional[str] = None
     use_bonus_points: Optional[Decimal] = Field(None, ge=0)

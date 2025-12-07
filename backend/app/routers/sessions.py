@@ -74,7 +74,7 @@ async def get_sessions(
     # Filter out past sessions unless explicitly requested
     if not include_past:
         current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
-        query = query.filter(Session.end_datetime > current_time)
+        query = query.filter(Session.start_datetime > current_time)
 
     if film_id:
         query = query.filter(Session.film_id == film_id)
@@ -95,6 +95,8 @@ async def get_sessions(
     if cinema_id:
         # Join with Hall to filter by cinema
         query = query.join(Hall).filter(Hall.cinema_id == cinema_id)
+
+    query = query.order_by(Session.start_datetime.asc())
 
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)

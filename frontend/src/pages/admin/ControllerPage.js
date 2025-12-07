@@ -28,6 +28,7 @@ import {
 } from '@mui/icons-material';
 import { ticketsAPI } from '../../api/tickets';
 import { ordersAPI } from '../../api/orders';
+import { qrScannerAPI } from '../../api/qrScanner';
 
 const ControllerPage = () => {
   const [qrCode, setQrCode] = useState('');
@@ -45,37 +46,33 @@ const ControllerPage = () => {
     }
 
     try {
-      // First try to validate as ticket QR code
+      // First try to validate as ticket QR code using the new QR scanner API
+      const ticketValidation = await qrScannerAPI.validateTicket(qrCode);
+      if (ticketValidation.is_valid) {
+        setSearchResult({
+          type: 'ticket',
+          data: ticketValidation
+        });
+        return;
+      }
+      // Ticket validation will throw error if not found, so we'll catch it and try order
+    } catch (ticketError) {
+      // If ticket validation fails, try order validation
       try {
-        const ticketValidation = await ticketsAPI.validateTicket(qrCode);
-        if (ticketValidation.is_valid) {
+        const order = await ordersAPI.getOrderByQR(qrCode);
+        if (order) {
           setSearchResult({
-            type: 'ticket',
-            data: ticketValidation,
-            order: ticketValidation.order
+            type: 'order',
+            data: order
           });
           return;
         }
-      } catch (ticketError) {
-        // If ticket validation fails, try order validation
-        try {
-          const order = await ordersAPI.getOrderByQR(qrCode);
-          if (order) {
-            setSearchResult({
-              type: 'order',
-              data: order
-            });
-            return;
-          }
-        } catch (orderError) {
-          // Both failed
-        }
+      } catch (orderError) {
+        // Both failed
       }
-
-      setError('QR-код недействителен или не найден');
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Ошибка при проверке QR-кода');
     }
+
+    setError('QR-код недействителен или не найден');
   };
 
   const handleMarkAsUsed = async (ticketId) => {
@@ -83,15 +80,33 @@ const ControllerPage = () => {
       await ticketsAPI.markTicketAsUsed(ticketId);
       // Refresh the search result
       if (searchResult && searchResult.type === 'ticket') {
-        const ticketValidation = await ticketsAPI.validateTicket(qrCode);
+        const ticketValidation = await qrScannerAPI.validateTicket(qrCode);
         setSearchResult({
           type: 'ticket',
           data: ticketValidation,
-          order: ticketValidation.order
         });
       }
     } catch (err) {
       setError(err.response?.data?.detail || 'Ошибка при обновлении статуса билета');
+    }
+  };
+
+  const handleMarkAllTicketsAsUsed = async (ticketIds) => {
+    try {
+      // Mark all tickets as used
+      const promises = ticketIds.map(ticketId => ticketsAPI.markTicketAsUsed(ticketId));
+      await Promise.all(promises);
+
+      // Refresh the search result
+      if (searchResult && searchResult.type === 'ticket') {
+        const ticketValidation = await qrScannerAPI.validateTicket(qrCode);
+        setSearchResult({
+          type: 'ticket',
+          data: ticketValidation,
+        });
+      }
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Ошибка при обновлении статуса билетов');
     }
   };
 
@@ -151,48 +166,174 @@ const ControllerPage = () => {
             
             {searchResult.type === 'ticket' && (
               <Box>
-                <Typography variant="body1" sx={{ mb: 2 }}>
-                  Билет действителен
-                </Typography>
-                <Card>
-                  <CardContent>
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} md={6}>
-                        <Typography variant="h6" color="primary">
-                          {searchResult.data.session?.film?.title || 'Фильм'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Ряд {searchResult.data.seat?.row_number}, Место {searchResult.data.seat?.seat_number}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Сеанс: {new Date(searchResult.data.session?.start_datetime).toLocaleString('ru-RU')}
-                        </Typography>
-                        <Chip
-                          label={searchResult.data.status}
-                          color={searchResult.data.status === 'used' ? 'success' : 'default'}
-                          variant="outlined"
-                          sx={{ mt: 1 }}
-                        />
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <Typography variant="subtitle2">Заказ:</Typography>
-                        <Typography variant="body2">
-                          #{searchResult.data.order?.order_number}
-                        </Typography>
-                        {!searchResult.data.used && (
-                          <Button
-                            variant="contained"
-                            startIcon={<CheckIcon />}
-                            onClick={() => handleMarkAsUsed(searchResult.data.id)}
-                            sx={{ mt: 2 }}
-                          >
-                            Отметить как использованный
-                          </Button>
+                {/* Handle single ticket */}
+                {searchResult.data.ticket && !searchResult.data.tickets && (
+                  <Box>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      Билет действителен
+                    </Typography>
+                    <Card>
+                      <CardContent>
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={6}>
+                            <Typography variant="h6" color="primary">
+                              {searchResult.data.ticket?.session?.film?.title || 'Фильм'}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Ряд {searchResult.data.ticket?.seat?.row_number}, Место {searchResult.data.ticket?.seat?.seat_number}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Сеанс: {new Date(searchResult.data.ticket?.session?.start_datetime).toLocaleString('ru-RU')}
+                            </Typography>
+                            <Chip
+                              label={searchResult.data.ticket?.status === 'USED' ? 'Использован' : searchResult.data.ticket?.status === 'RESERVED' ? 'Забронирован' : searchResult.data.ticket?.status === 'PAID' ? 'Оплачен' : searchResult.data.ticket?.status}
+                              color={searchResult.data.ticket?.status === 'USED' ? 'success' : 'default'}
+                              variant="outlined"
+                              sx={{ mt: 1 }}
+                            />
+                          </Grid>
+                          <Grid item xs={12} md={6}>
+                            <Typography variant="subtitle2">Заказ:</Typography>
+                            <Typography variant="body2">
+                              #{searchResult.data.order?.order_number}
+                            </Typography>
+                            {/* Check if session has ended for single ticket */}
+                            {(() => {
+                              const sessionEnd = new Date(searchResult.data.ticket?.session?.end_datetime);
+                              const currentTime = new Date();
+                              const sessionEnded = sessionEnd < currentTime;
+
+                              return (
+                                <>
+                                  {sessionEnded && (
+                                    <Alert severity="warning" sx={{ mt: 1 }}>
+                                      Сеанс уже завершён
+                                    </Alert>
+                                  )}
+                                  {searchResult.data.ticket?.status !== 'USED' && !sessionEnded && (
+                                    <Button
+                                      variant="contained"
+                                      startIcon={<CheckIcon />}
+                                      onClick={() => handleMarkAsUsed(searchResult.data.ticket.id)}
+                                      sx={{ mt: 2 }}
+                                    >
+                                      Отметить как использованный
+                                    </Button>
+                                  )}
+                                  {searchResult.data.ticket?.status === 'USED' && (
+                                    <Alert severity="success" sx={{ mt: 2 }}>
+                                      Билет уже использован
+                                    </Alert>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </Grid>
+                        </Grid>
+                      </CardContent>
+                    </Card>
+                  </Box>
+                )}
+
+                {/* Handle multiple tickets from order */}
+                {searchResult.data.tickets && (
+                  <Box>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {searchResult.data.message}
+                    </Typography>
+
+                    {/* Check if order is cancelled/refunded */}
+                    {searchResult.data.status === 'order_cancelled_or_refunded' && (
+                      <Alert severity="error" sx={{ mb: 2 }}>
+                        {searchResult.data.message}
+                      </Alert>
+                    )}
+
+                    {/* Common session info */}
+                    {searchResult.data.tickets.length > 0 && (
+                      <>
+                        <Card sx={{ mb: 2 }}>
+                          <CardContent>
+                            <Grid container spacing={2}>
+                              <Grid item xs={12} md={8}>
+                                <Typography variant="h6" color="primary">
+                                  {searchResult.data.tickets[0]?.session?.film?.title || 'Фильм'}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  Сеанс: {new Date(searchResult.data.tickets[0]?.session?.start_datetime).toLocaleString('ru-RU')}
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={12} md={4}>
+                                <Typography variant="subtitle2">Заказ:</Typography>
+                                <Typography variant="body2">
+                                  #{searchResult.data.order?.order_number}
+                                </Typography>
+                                <Typography variant="body2">
+                                  Статус: {searchResult.data.order?.status === 'refunded' ? 'Возвращен' :
+                                          searchResult.data.order?.status === 'cancelled' ? 'Отменен' :
+                                          searchResult.data.order?.status === 'paid' ? 'Оплачен' :
+                                          searchResult.data.order?.status}
+                                </Typography>
+                              </Grid>
+                            </Grid>
+                          </CardContent>
+                        </Card>
+
+                        {/* Tickets list */}
+                        <List>
+                          {searchResult.data.tickets.map((ticket, index) => (
+                            <ListItem key={ticket.id} divider>
+                              <ListItemIcon>
+                                <TicketIcon sx={{ color: ticket.status === 'USED' ? '#8bc34a' : '#46d369' }} />
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={`Ряд ${ticket.seat?.row_number}, Место ${ticket.seat?.seat_number}`}
+                                secondary={`Статус: ${ticket.status === 'USED' ? 'Использован' : ticket.status === 'RESERVED' ? 'Забронирован' : ticket.status === 'PAID' ? 'Оплачен' : ticket.status}`}
+                              />
+                              <Chip
+                                label={ticket.status === 'USED' ? 'Использован' : ticket.status === 'RESERVED' ? 'Забронирован' : ticket.status === 'PAID' ? 'Оплачен' : ticket.status}
+                                color={ticket.status === 'USED' ? 'success' : 'default'}
+                                variant="outlined"
+                              />
+                            </ListItem>
+                          ))}
+                        </List>
+
+                        {/* Check if session has ended */}
+                        {searchResult.data.tickets.length > 0 && (() => {
+                          const sessionEnd = new Date(searchResult.data.tickets[0].session?.end_datetime);
+                          const currentTime = new Date();
+                          return sessionEnd < currentTime ? (
+                            <Alert severity="warning" sx={{ mt: 2 }}>
+                              Сеанс уже завершён
+                            </Alert>
+                          ) : null;
+                        })()}
+
+                        {/* Mark all as used button if not all tickets are used and order is not cancelled */}
+                        {searchResult.data.status !== 'order_cancelled_or_refunded' &&
+                         searchResult.data.can_be_used !== false && (
+                          <Box sx={{ mt: 2, textAlign: 'center' }}>
+                            <Button
+                              variant="contained"
+                              startIcon={<CheckIcon />}
+                              onClick={() => handleMarkAllTicketsAsUsed(searchResult.data.tickets.map(t => t.id))}
+                              sx={{ py: 1.5 }}
+                            >
+                              Отметить все билеты как использованные
+                            </Button>
+                          </Box>
                         )}
-                      </Grid>
-                    </Grid>
-                  </CardContent>
-                </Card>
+
+                        {searchResult.data.tickets.every(ticket => ticket.status === 'USED') && (
+                          <Alert severity="info" sx={{ mt: 2 }}>
+                            Все билеты уже отмечены как использованные
+                          </Alert>
+                        )}
+                      </>
+                    )}
+                  </Box>
+                )}
               </Box>
             )}
 
@@ -207,11 +348,23 @@ const ControllerPage = () => {
                   <TicketIcon sx={{ mr: 1, color: '#46d369' }} />
                   Билеты
                 </Typography>
+
+                {/* Check if session has ended for tickets in order */}
+                {searchResult.data.tickets && searchResult.data.tickets.length > 0 && (() => {
+                  const sessionEnd = new Date(searchResult.data.tickets[0]?.session?.end_datetime);
+                  const currentTime = new Date();
+                  return sessionEnd < currentTime ? (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      Сеанс уже завершён
+                    </Alert>
+                  ) : null;
+                })()}
+
                 <List>
                   {searchResult.data.tickets?.map((ticket, index) => (
                     <ListItem key={index} divider>
                       <ListItemIcon>
-                        <TicketIcon sx={{ color: '#46d369' }} />
+                        <TicketIcon sx={{ color: ticket.status === 'used' ? '#8bc34a' : '#46d369' }} />
                       </ListItemIcon>
                       <ListItemText
                         primary={`${ticket.session?.film?.title || 'Фильм'} - Ряд ${ticket.seat?.row_number}, Место ${ticket.seat?.seat_number}`}
@@ -243,13 +396,14 @@ const ControllerPage = () => {
                       />
                       <Chip
                         label={
-                          item.status === 'completed' ? 'Выдан' : 
-                          item.status === 'ready' ? 'Готов' : 
-                          'В обработке'
+                          item.status === 'completed' ? 'Выдан' :
+                          item.status === 'ready' ? 'Готов' :
+                          item.status === 'pending' ? 'В обработке' :
+                          item.status
                         }
                         color={
-                          item.status === 'completed' ? 'success' : 
-                          item.status === 'ready' ? 'info' : 
+                          item.status === 'completed' ? 'success' :
+                          item.status === 'ready' ? 'info' :
                           'default'
                         }
                         variant="outlined"

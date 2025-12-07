@@ -48,12 +48,20 @@ class ConcessionItemResponse(ConcessionItemBase):
     status: ConcessionItemStatus
 
 
-# Schema for creating a concession preorder
+# Schema for creating a concession preorder when order already exists
 class ConcessionPreorderCreate(BaseModel):
     order_id: int = Field(..., gt=0)
     concession_item_id: int = Field(..., gt=0)
     quantity: int = Field(..., gt=0, description="Quantity must be positive")
     unit_price: Decimal = Field(..., ge=0)
+
+
+# Schema for creating a concession preorder during booking (order_id is not known yet)
+class ConcessionPreorderCreateForOrder(BaseModel):
+    concession_item_id: int = Field(..., gt=0)
+    quantity: int = Field(..., gt=0, description="Quantity must be positive")
+    unit_price: Decimal = Field(..., ge=0)
+    total_price: Decimal = Field(..., ge=0)
 
 
 # Schema for concession preorder response

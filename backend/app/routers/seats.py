@@ -85,7 +85,7 @@ async def create_seat(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new seat."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can create seats"
@@ -140,7 +140,7 @@ async def update_seat(
     db: AsyncSession = Depends(get_db)
 ):
     """Update seat by ID."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can update seats"
@@ -173,7 +173,7 @@ async def delete_seat(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete seat by ID."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can delete seats"

@@ -11,6 +11,13 @@ import {
     Avatar,
     Container,
     useScrollTrigger,
+    Drawer,
+    List,
+    ListItem,
+    ListItemButton,
+    ListItemIcon,
+    ListItemText,
+    Divider,
 } from "@mui/material";
 import {
     MovieFilter as MovieIcon,
@@ -20,9 +27,12 @@ import {
     Logout as LogoutIcon,
     QrCodeScanner as QrCodeScannerIcon,
     LocalCafe as LocalCafeIcon,
+    Menu as MenuIcon,
+    Home as HomeIcon,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useTheme, useMediaQuery } from "@mui/material";
 
 const ElevationScroll = ({ children }) => {
     const trigger = useScrollTrigger({
@@ -37,8 +47,12 @@ const ElevationScroll = ({ children }) => {
 
 const Header = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user, isAuthenticated, logout } = useAuth();
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const [anchorEl, setAnchorEl] = useState(null);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     const handleMenu = (event) => {
         setAnchorEl(event.currentTarget);
@@ -51,17 +65,25 @@ const Header = () => {
     const handleLogout = () => {
         logout();
         handleClose();
+        setMobileMenuOpen(false);  // Close mobile menu when logging out
         navigate("/");
     };
 
     const handleProfile = () => {
         navigate("/profile");
         handleClose();
+        setMobileMenuOpen(false);  // Close mobile menu when navigating from profile
     };
-
 
     const handleAdmin = () => {
         navigate("/admin");
+        handleClose();
+        setMobileMenuOpen(false);  // Close mobile menu when navigating from admin
+    };
+
+    const handleNavigation = (path) => {
+        navigate(path);
+        setMobileMenuOpen(false);  // Close mobile menu directly instead of duplicating function
         handleClose();
     };
 
@@ -106,75 +128,92 @@ const Header = () => {
                             CinemaBooking
                         </Typography>
 
-                        <Box sx={{ flexGrow: 1, display: "flex", gap: 2 }}>
-                            <Button
+                        {/* Desktop Navigation */}
+                        {!isMobile && (
+                            <Box sx={{ flexGrow: 1, display: "flex", gap: 2 }}>
+                                <Button
+                                    color="inherit"
+                                    onClick={() => navigate("/")}
+                                    sx={{
+                                        "&:hover": {
+                                            color: "#e50914",
+                                        },
+                                    }}
+                                >
+                                    Фильмы
+                                </Button>
+                                {isAuthenticated && (
+                                    <Button
+                                        color="inherit"
+                                        startIcon={<TicketIcon />}
+                                        onClick={() => navigate("/my-orders")}
+                                        sx={{
+                                            "&:hover": {
+                                                color: "#e50914",
+                                            },
+                                        }}
+                                    >
+                                        Мои заказы
+                                    </Button>
+                                )}
+                                {isAuthenticated && (user?.role === "admin" || user?.role === "super_admin" || user?.role === "staff") && (
+                                    <Button
+                                        color="inherit"
+                                        startIcon={<AdminIcon />}
+                                        onClick={() => navigate("/admin")}
+                                        sx={{
+                                            "&:hover": {
+                                                color: "#ffd700",
+                                            },
+                                        }}
+                                    >
+                                        Админ-панель
+                                    </Button>
+                                )}
+                                {isAuthenticated && (user?.role === "admin" || user?.role === "staff" || user?.role === "super_admin") && (
+                                    <Button
+                                        color="inherit"
+                                        startIcon={<QrCodeScannerIcon />}
+                                        onClick={() => navigate("/controller")}
+                                        sx={{
+                                            "&:hover": {
+                                                color: "#e50914",
+                                            },
+                                        }}
+                                    >
+                                        Контрольный пункт
+                                    </Button>
+                                )}
+                                {isAuthenticated && (user?.role === "admin" || user?.role === "staff" || user?.role === "super_admin") && (
+                                    <Button
+                                        color="inherit"
+                                        startIcon={<LocalCafeIcon />}
+                                        onClick={() => navigate("/concession-staff")}
+                                        sx={{
+                                            "&:hover": {
+                                                color: "#ffd700",
+                                            },
+                                        }}
+                                    >
+                                        Кинобар
+                                    </Button>
+                                )}
+                            </Box>
+                        )}
+
+                        {/* Mobile Navigation Button */}
+                        {isMobile && (
+                            <IconButton
+                                size="large"
+                                edge="start"
                                 color="inherit"
-                                onClick={() => navigate("/")}
-                                sx={{
-                                    "&:hover": {
-                                        color: "#e50914",
-                                    },
-                                }}
+                                aria-label="menu"
+                                onClick={() => setMobileMenuOpen(true)}
+                                sx={{ mr: 2 }}
                             >
-                                Фильмы
-                            </Button>
-                            {isAuthenticated && (
-                                <Button
-                                    color="inherit"
-                                    startIcon={<TicketIcon />}
-                                    onClick={() => navigate("/my-orders")}
-                                    sx={{
-                                        "&:hover": {
-                                            color: "#e50914",
-                                        },
-                                    }}
-                                >
-                                    Мои заказы
-                                </Button>
-                            )}
-                            {isAuthenticated && user?.role === "admin" && (
-                                <Button
-                                    color="inherit"
-                                    startIcon={<AdminIcon />}
-                                    onClick={() => navigate("/admin")}
-                                    sx={{
-                                        "&:hover": {
-                                            color: "#ffd700",
-                                        },
-                                    }}
-                                >
-                                    Админ-панель
-                                </Button>
-                            )}
-                            {isAuthenticated && (user?.role === "admin" || user?.role === "staff") && (
-                                <Button
-                                    color="inherit"
-                                    startIcon={<QrCodeScannerIcon />}
-                                    onClick={() => navigate("/controller")}
-                                    sx={{
-                                        "&:hover": {
-                                            color: "#e50914",
-                                        },
-                                    }}
-                                >
-                                    Контрольный пункт
-                                </Button>
-                            )}
-                            {isAuthenticated && (user?.role === "admin" || user?.role === "staff") && (
-                                <Button
-                                    color="inherit"
-                                    startIcon={<LocalCafeIcon />}
-                                    onClick={() => navigate("/concession-staff")}
-                                    sx={{
-                                        "&:hover": {
-                                            color: "#ffd700",
-                                        },
-                                    }}
-                                >
-                                    Кинобар
-                                </Button>
-                            )}
-                        </Box>
+                                <MenuIcon />
+                            </IconButton>
+                        )}
 
                         <Box sx={{ flexGrow: 0 }}>
                             {isAuthenticated ? (
@@ -278,6 +317,195 @@ const Header = () => {
                                 </Button>
                             )}
                         </Box>
+
+                        {/* Mobile Drawer Menu */}
+                        <Drawer
+                            anchor="left"
+                            open={mobileMenuOpen}
+                            onClose={() => setMobileMenuOpen(false)}
+                            PaperProps={{
+                                sx: {
+                                    width: 280,
+                                    background: "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+                                    color: "white",
+                                }
+                            }}
+                        >
+                            <Box sx={{ width: 280, pt: 2 }}>
+                                <List>
+                                    <ListItem disablePadding>
+                                        <ListItemButton onClick={() => handleNavigation("/")}>
+                                            <ListItemIcon sx={{ color: "inherit" }}>
+                                                <HomeIcon />
+                                            </ListItemIcon>
+                                            <ListItemText primary="Фильмы" />
+                                        </ListItemButton>
+                                    </ListItem>
+
+                                    {isAuthenticated && (
+                                        <ListItem disablePadding>
+                                            <ListItemButton onClick={() => handleNavigation("/my-orders")}>
+                                                <ListItemIcon sx={{ color: "inherit" }}>
+                                                    <TicketIcon />
+                                                </ListItemIcon>
+                                                <ListItemText primary="Мои заказы" />
+                                            </ListItemButton>
+                                        </ListItem>
+                                    )}
+
+                                    {isAuthenticated && user?.role === "admin" && (
+                                        <ListItem disablePadding>
+                                            <ListItemButton onClick={() => handleNavigation("/admin")}>
+                                                <ListItemIcon sx={{ color: "inherit" }}>
+                                                    <AdminIcon />
+                                                </ListItemIcon>
+                                                <ListItemText primary="Админ-панель" />
+                                            </ListItemButton>
+                                        </ListItem>
+                                    )}
+
+                                    {isAuthenticated && (user?.role === "admin" || user?.role === "staff") && (
+                                        <ListItem disablePadding>
+                                            <ListItemButton onClick={() => handleNavigation("/controller")}>
+                                                <ListItemIcon sx={{ color: "inherit" }}>
+                                                    <QrCodeScannerIcon />
+                                                </ListItemIcon>
+                                                <ListItemText primary="Контрольный пункт" />
+                                            </ListItemButton>
+                                        </ListItem>
+                                    )}
+
+                                    {isAuthenticated && (user?.role === "admin" || user?.role === "staff") && (
+                                        <ListItem disablePadding>
+                                            <ListItemButton onClick={() => handleNavigation("/concession-staff")}>
+                                                <ListItemIcon sx={{ color: "inherit" }}>
+                                                    <LocalCafeIcon />
+                                                </ListItemIcon>
+                                                <ListItemText primary="Кинобар" />
+                                            </ListItemButton>
+                                        </ListItem>
+                                    )}
+
+                                    <Divider sx={{ backgroundColor: "rgba(255, 255, 255, 0.1)", my: 1 }} />
+
+                                    {isAuthenticated ? (
+                                        <>
+                                            {/* User Profile Info at Top */}
+                                            <ListItem disablePadding sx={{ justifyContent: "center", py: 2 }}>
+                                                <Box sx={{ textAlign: "center", width: "100%" }}>
+                                                    <Avatar
+                                                        sx={{
+                                                            width: 60,
+                                                            height: 60,
+                                                            fontSize: 24,
+                                                            bgcolor: "#e50914",
+                                                            mx: "auto",
+                                                            mb: 1
+                                                        }}
+                                                    >
+                                                        {user?.first_name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
+                                                    </Avatar>
+                                                    <Typography variant="subtitle1" sx={{ color: "white", fontWeight: 600 }}>
+                                                        {user?.first_name || user?.email}
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{ color: "#aaa" }}>
+                                                        {user?.role === "admin" ? "Администратор" :
+                                                         user?.role === "staff" ? "Сотрудник" :
+                                                         "Пользователь"}
+                                                    </Typography>
+                                                </Box>
+                                            </ListItem>
+
+                                            <ListItem disablePadding>
+                                                <ListItemButton onClick={handleProfile}>
+                                                    <ListItemIcon sx={{ color: "inherit" }}>
+                                                        <AccountCircle />
+                                                    </ListItemIcon>
+                                                    <ListItemText primary="Профиль" />
+                                                </ListItemButton>
+                                            </ListItem>
+
+                                            {user?.role === "admin" && (
+                                                <ListItem disablePadding>
+                                                    <ListItemButton onClick={() => handleNavigation("/admin")}>
+                                                        <ListItemIcon sx={{ color: "inherit" }}>
+                                                            <AdminIcon />
+                                                        </ListItemIcon>
+                                                        <ListItemText primary="Админ-панель" />
+                                                    </ListItemButton>
+                                                </ListItem>
+                                            )}
+
+                                            {(user?.role === "admin" || user?.role === "staff") && (
+                                                <ListItem disablePadding>
+                                                    <ListItemButton onClick={() => handleNavigation("/controller")}>
+                                                        <ListItemIcon sx={{ color: "inherit" }}>
+                                                            <QrCodeScannerIcon />
+                                                        </ListItemIcon>
+                                                        <ListItemText primary="Контрольный пункт" />
+                                                    </ListItemButton>
+                                                </ListItem>
+                                            )}
+
+                                            {(user?.role === "admin" || user?.role === "staff") && (
+                                                <ListItem disablePadding>
+                                                    <ListItemButton onClick={() => handleNavigation("/concession-staff")}>
+                                                        <ListItemIcon sx={{ color: "inherit" }}>
+                                                            <LocalCafeIcon />
+                                                        </ListItemIcon>
+                                                        <ListItemText primary="Работник кинобара" />
+                                                    </ListItemButton>
+                                                </ListItem>
+                                            )}
+
+                                            <ListItem disablePadding>
+                                                <ListItemButton onClick={handleLogout}>
+                                                    <ListItemIcon sx={{ color: "inherit" }}>
+                                                        <LogoutIcon />
+                                                    </ListItemIcon>
+                                                    <ListItemText primary="Выйти" />
+                                                </ListItemButton>
+                                            </ListItem>
+                                        </>
+                                    ) : (
+                                        <>
+                                            {/* Guest User Section */}
+                                            <ListItem disablePadding sx={{ justifyContent: "center", py: 2 }}>
+                                                <Box sx={{ textAlign: "center", width: "100%" }}>
+                                                    <Avatar
+                                                        sx={{
+                                                            width: 60,
+                                                            height: 60,
+                                                            fontSize: 24,
+                                                            bgcolor: "#666",
+                                                            mx: "auto",
+                                                            mb: 1
+                                                        }}
+                                                    >
+                                                        <AccountCircle sx={{ fontSize: 30 }} />
+                                                    </Avatar>
+                                                    <Typography variant="subtitle1" sx={{ color: "white", fontWeight: 600 }}>
+                                                        Гость
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{ color: "#aaa" }}>
+                                                        Не авторизован
+                                                    </Typography>
+                                                </Box>
+                                            </ListItem>
+
+                                            <ListItem disablePadding>
+                                                <ListItemButton onClick={() => { navigate("/login"); setMobileMenuOpen(false); }}>
+                                                    <ListItemIcon sx={{ color: "inherit" }}>
+                                                        <AccountCircle />
+                                                    </ListItemIcon>
+                                                    <ListItemText primary="Войти" />
+                                                </ListItemButton>
+                                            </ListItem>
+                                        </>
+                                    )}
+                                </List>
+                            </Box>
+                        </Drawer>
                     </Toolbar>
                 </Container>
             </AppBar>

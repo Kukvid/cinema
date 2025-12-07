@@ -18,7 +18,6 @@ import Register from './pages/Register';
 
 // User Pages
 import Profile from './pages/Profile';
-import MyTickets from './pages/MyTickets';
 import MyOrders from './pages/MyOrders';
 import PaymentPage from './pages/PaymentPage';
 
@@ -73,14 +72,6 @@ function App() {
                   </PrivateRoute>
                 }
               />
-              <Route
-                path="/my-tickets"
-                element={
-                  <PrivateRoute>
-                    <MyTickets />
-                  </PrivateRoute>
-                }
-              />
 
               <Route
                 path="/my-orders"
@@ -104,7 +95,7 @@ function App() {
               <Route
                 path="/admin"
                 element={
-                  <PrivateRoute requireAdmin>
+                  <PrivateRoute requireStaff>
                     <Dashboard />
                   </PrivateRoute>
                 }
@@ -112,7 +103,7 @@ function App() {
               <Route
                 path="/admin/users"
                 element={
-                  <PrivateRoute requireAdmin>
+                  <PrivateRoute requireSuperAdmin>
                     <UserManagement />
                   </PrivateRoute>
                 }
@@ -120,7 +111,7 @@ function App() {
               <Route
                 path="/admin/cinemas"
                 element={
-                  <PrivateRoute requireAdmin>
+                  <PrivateRoute requireSuperAdmin>
                     <CinemasManage />
                   </PrivateRoute>
                 }
@@ -128,7 +119,7 @@ function App() {
               <Route
                 path="/admin/genres"
                 element={
-                  <PrivateRoute requireAdmin>
+                  <PrivateRoute requireSuperAdmin>
                     <GenreManagement />
                   </PrivateRoute>
                 }
@@ -224,7 +215,7 @@ function App() {
               <Route
                 path="/admin/concessions"
                 element={
-                  <PrivateRoute requireAdmin>
+                  <PrivateRoute requireStaff>
                     <ConcessionManagement />
                   </PrivateRoute>
                 }

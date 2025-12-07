@@ -2,15 +2,19 @@ from typing import List, Annotated
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
+from decimal import Decimal
 
 from app.database import get_db
+from app.config import get_settings
 from app.models.concession_item import ConcessionItem
 from app.models.concession_preorder import ConcessionPreorder
 from app.models.order import Order
+from app.models.promocode import Promocode
+from app.models.ticket import Ticket
 from app.models.user import User
-from app.models.enums import ConcessionItemStatus, PreorderStatus
+from app.models.enums import ConcessionItemStatus, PreorderStatus, DiscountType, UserRoles
 from app.schemas.concession import (
     ConcessionItemCreate, ConcessionItemUpdate, ConcessionItemResponse,
     ConcessionPreorderCreate, ConcessionPreorderResponse
@@ -223,6 +227,37 @@ async def create_preorder(
     item.stock_quantity -= preorder_data.quantity
 
     db.add(new_preorder)
+
+    # Update order amounts to include the new concession item
+    order_result = await db.execute(select(Order).filter(Order.id == preorder_data.order_id))
+    order = order_result.scalar_one_or_none()
+
+    if order:
+        # Calculate the total concession amount for this order
+        concession_total_result = await db.execute(
+            select(func.sum(ConcessionPreorder.total_price))
+            .filter(ConcessionPreorder.order_id == preorder_data.order_id)
+        )
+        concession_total_amount = concession_total_result.scalar() or Decimal("0.00")
+
+        # Calculate total with tickets + concessions
+        total_with_concessions = order.total_amount + concession_total_amount
+
+        # Apply discounts to the total amount (the original discount was applied to the initial total)
+        discount_proportion = Decimal("0.00")
+        if order.total_amount > 0:
+            discount_proportion = order.discount_amount / order.total_amount
+        else:
+            discount_proportion = Decimal("0.00")
+
+        # Calculate how much discount to apply to the new total amount
+        new_discount_amount = total_with_concessions * discount_proportion
+        new_final_amount = total_with_concessions - new_discount_amount
+
+        # Update order amounts
+        order.total_amount = total_with_concessions
+        order.final_amount = new_final_amount
+
     await db.commit()
     await db.refresh(new_preorder)
 
@@ -326,6 +361,88 @@ async def create_preorder_batch(
         db.add(new_preorder)
         created_preorders.append(new_preorder)
 
+    # Get the order to update its amounts
+    order_result = await db.execute(select(Order).filter(Order.id == order_id))
+    order = order_result.scalar_one_or_none()
+
+    if order:
+        # Calculate the total concession amount for this order
+        concession_total_result = await db.execute(
+            select(func.sum(ConcessionPreorder.total_price))
+            .filter(ConcessionPreorder.order_id == order_id)
+        )
+        concession_total_amount = concession_total_result.scalar() or Decimal("0.00")
+
+        # Calculate original ticket total to reconstruct the full calculation
+        ticket_total_result = await db.execute(
+            select(func.sum(Ticket.price))
+            .filter(Ticket.order_id == order_id)
+        )
+        ticket_total_amount = ticket_total_result.scalar() or Decimal("0.00")
+
+        # Calculate base total (tickets + concessions) before any discounts
+        base_total = ticket_total_amount + concession_total_amount
+
+        # Calculate original discount proportions for proper recalculation
+        # Split the original discount between promocode and bonus portions if both were used
+        original_promo_discount = Decimal("0.00")
+        original_bonus_deduction = Decimal("0.00")
+
+        # Get the promocode for this order separately to ensure it's properly loaded
+        if order.promocode_id:
+            promocode_result = await db.execute(
+                select(Promocode).filter(Promocode.id == order.promocode_id)
+            )
+            promocode = promocode_result.scalar_one_or_none()
+
+            if promocode:
+                # Get original promocode discount value
+                original_promo_discount = promocode.discount_value if promocode else Decimal("0.00")
+
+                # If promocode is percentage-based, calculate based on original ticket total
+                if promocode.discount_type == DiscountType.PERCENTAGE:
+                    original_promo_discount = (ticket_total_amount * promocode.discount_value / Decimal("100")).quantize(Decimal("0.01"))
+                else:
+                    # FIXED_AMOUNT promocode - use fixed value but cap at total amount
+                    original_promo_discount = min(promocode.discount_value, ticket_total_amount)
+        else:
+            promocode = None
+
+        # Calculate original bonus deduction from total discount minus promocode discount
+        original_bonus_deduction = max(Decimal("0.00"), order.discount_amount - original_promo_discount)
+
+        # For the new total (with concession items), we'll apply the same promotion logic
+        # The promocode discount should be recalculated based on the new total if it's percentage-based
+        new_promo_discount = Decimal("0.00")
+        if promocode:
+            if promocode.discount_type == DiscountType.PERCENTAGE:
+                # For percentage promocodes, apply the same percentage to the new total
+                new_promo_discount = (base_total * promocode.discount_value / Decimal("100")).quantize(Decimal("0.01"))
+            else:
+                # For fixed amount promocodes, keep the same fixed amount but make sure it doesn't exceed total
+                new_promo_discount = min(promocode.discount_value, base_total)
+
+        # Calculate new bonus deduction based on remaining amount after promo discount
+        settings = get_settings()
+
+        # Apply bonus deduction rules: max percentage of amount after promo discount
+        max_bonus_for_new_total = (base_total - new_promo_discount) * Decimal(settings.BONUS_MAX_PERCENTAGE) / Decimal("100")
+        new_bonus_deduction = min(original_bonus_deduction, max_bonus_for_new_total)
+
+        # Ensure final amount doesn't go below minimum allowed payment amount
+        potential_final_amount = base_total - new_promo_discount - new_bonus_deduction
+        if potential_final_amount < Decimal(settings.BONUS_MIN_PAYMENT_AMOUNT):
+            # Adjust bonus deduction to ensure minimum payment is met
+            new_bonus_deduction = max(Decimal("0.00"), base_total - new_promo_discount - Decimal(settings.BONUS_MIN_PAYMENT_AMOUNT))
+
+        # Final calculation following frontend logic: total - promo_discount - bonus_deduction
+        new_final_amount = base_total - new_promo_discount - new_bonus_deduction
+
+        # Update order amounts to reflect new totals
+        order.total_amount = base_total
+        order.discount_amount = new_promo_discount + new_bonus_deduction  # Combined discount amount
+        order.final_amount = new_final_amount
+
     await db.commit()
 
     # Refresh all created preorders
@@ -346,7 +463,7 @@ async def create_preorder_batch(
     )
 
 
-@router.post("/preorders/{preorder_id}/complete")
+@router.post("/concession_preorders/{preorder_id}/complete")
 async def mark_concession_item_as_completed(
     preorder_id: int,
     current_user: Annotated[User, Depends(get_current_active_user)],
@@ -354,7 +471,7 @@ async def mark_concession_item_as_completed(
 ):
     """Mark a concession preorder as completed - for concession staff use."""
     # Verify user has staff rights (admin or concession staff role)
-    if current_user.role not in [UserRoles.ADMIN, UserRoles.SUPER_ADMIN, UserRoles.STAFF]:
+    if current_user.role.name not in [UserRoles.admin, UserRoles.super_admin, UserRoles.staff]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins and staff can mark concession items as completed"
@@ -373,7 +490,7 @@ async def mark_concession_item_as_completed(
         )
 
     # Update the status to completed
-    preorder.status = PreorderStatus.completed
+    preorder.status = PreorderStatus.COMPLETED
     await db.commit()
     await db.refresh(preorder)
 

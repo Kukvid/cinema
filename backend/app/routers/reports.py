@@ -177,7 +177,7 @@ async def generate_report(
     db: AsyncSession = Depends(get_db)
 ):
     """Generate report with given ID."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can generate reports"
@@ -214,7 +214,7 @@ async def delete_report(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete report by ID."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can delete reports"

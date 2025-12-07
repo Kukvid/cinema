@@ -77,6 +77,18 @@ const Profile = () => {
     setSuccess('');
   };
 
+  const getRoleName = (role) => {
+      if (role == 'admin'){
+        return "Администратор";
+      }
+      else if (role == 'super_admin'){
+        return "Супер-администратор"
+      }
+      else{
+        return "Пользователь"
+      }
+  }
+
   return (
     <Container maxWidth="lg" sx={{ py: 6 }}>
       <Typography
@@ -273,7 +285,7 @@ const Profile = () => {
                 <Grid item xs={12}>
                   <Divider sx={{ my: 2, borderColor: 'rgba(229, 9, 20, 0.2)' }} />
                   <Typography variant="body2" color="text.secondary">
-                    Роль: <strong>{user?.role === 'admin' ? 'Администратор' : 'Пользователь'}</strong>
+                    Роль: <strong>{getRoleName(user?.role)}</strong>
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                     Дата регистрации: {new Date(user?.registration_date).toLocaleDateString('ru-RU')}

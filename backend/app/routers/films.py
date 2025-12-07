@@ -1,4 +1,6 @@
 from typing import List, Annotated, Optional
+from datetime import datetime
+import pytz
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
@@ -8,8 +10,45 @@ from app.database import get_db
 from app.models.film import Film, film_genres
 from app.models.genre import Genre
 from app.models.user import User
+from app.models.session import Session
+from app.models.hall import Hall
+from app.models.ticket import Ticket
+from app.models.enums import TicketStatus
 from app.schemas.film import FilmCreate, FilmUpdate, FilmResponse, FilmsPaginatedResponse
+from app.schemas.session import SessionResponse
 from app.routers.auth import get_current_active_user
+
+
+async def calculate_available_seats(sessions: List[Session], db: AsyncSession):
+    """Calculate available seats for each session."""
+    if not sessions:
+        return {}
+
+    session_ids = [s.id for s in sessions]
+
+    # Get booked tickets count for all sessions in one query
+    booked_tickets_query = select(
+        Ticket.session_id,
+        func.count(Ticket.id).label('booked_count')
+    ).filter(
+        Ticket.session_id.in_(session_ids),
+        Ticket.status.in_([TicketStatus.RESERVED, TicketStatus.PAID])
+    ).group_by(Ticket.session_id)
+
+    result = await db.execute(booked_tickets_query)
+    booked_counts = {row.session_id: row.booked_count for row in result}
+
+    # Calculate available seats for each session
+    available_seats_map = {}
+    for session in sessions:
+        if session.hall:
+            total_capacity = session.hall.capacity
+            booked = booked_counts.get(session.id, 0)
+            available_seats_map[session.id] = max(0, total_capacity - booked)
+        else:
+            available_seats_map[session.id] = 0
+
+    return available_seats_map
 
 router = APIRouter()
 
@@ -205,6 +244,58 @@ async def update_film(
     await db.refresh(film, attribute_names=['genres'])
 
     return film
+
+
+@router.get("/{film_id}/sessions", response_model=List[SessionResponse])
+async def get_film_sessions(
+    film_id: int,
+    include_past: bool = Query(False, description="Include past sessions in results"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get sessions for a specific film."""
+    # Verify film exists
+    result = await db.execute(select(Film).filter(Film.id == film_id))
+    film = result.scalar_one_or_none()
+
+    if not film:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Film with id {film_id} not found"
+        )
+
+    # Build query for sessions
+    query = (
+        select(Session)
+        .options(
+            selectinload(Session.hall).selectinload(Hall.cinema),
+            selectinload(Session.film)
+        )
+        .filter(Session.film_id == film_id)
+    )
+
+    # Filter out past sessions unless explicitly requested
+    if not include_past:
+        current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+        query = query.filter(Session.end_datetime > current_time)
+
+    query = query.order_by(Session.start_datetime.asc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    sessions = result.scalars().unique().all()
+
+    # Calculate available seats for all sessions
+    available_seats_map = await calculate_available_seats(sessions, db)
+
+    # Convert to response format with available_seats
+    response_sessions = []
+    for session in sessions:
+        session_dict = SessionResponse.model_validate(session).model_dump()
+        session_dict['available_seats'] = available_seats_map.get(session.id, 0)
+        session_dict['film_title'] = session.film.title
+        response_sessions.append(SessionResponse(**session_dict))
+
+    return response_sessions
 
 
 @router.delete("/{film_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -29,7 +29,7 @@ export const ticketsAPI = {
   },
 
   validateTicket: async (qrCode) => {
-    const response = await axios.post('/tickets/validate', { qr_code: qrCode });
+    const response = await axios.post('/qr-scanner/ticket/validate', { qr_code: qrCode });
     return response.data;
   },
 

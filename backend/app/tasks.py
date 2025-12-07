@@ -24,9 +24,10 @@ import pytz
 logger = logging.getLogger(__name__)
 
 class OrderCleanupService:
-    def __init__(self, db_url: str):
-        self.db_url = db_url
-        self.engine = create_async_engine(db_url)
+    def __init__(self, db_url: str = None):
+        # Use the shared engine from database.py if available
+        from app.database import engine as shared_engine
+        self.engine = shared_engine
         self.SessionLocal = sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
         self.scheduler = AsyncIOScheduler()
 
@@ -134,8 +135,12 @@ class OrderCleanupService:
 
         async with self.SessionLocal() as db:
             try:
-                current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
-                logger.info(f"Current time for comparison: {current_time}")
+                # Get Moscow timezone-aware current time
+                moscow_tz = pytz.timezone('Europe/Moscow')
+                current_time = datetime.now(moscow_tz)
+                # For database comparison, we'll use timezone-naive time (as stored in db)
+                current_time_naive = current_time.replace(tzinfo=None)
+                logger.info(f"Current time for comparison: {current_time_naive}")
 
                 # Update sessions that have started but are still marked as scheduled
                 logger.info("Updating started sessions...")
@@ -144,7 +149,8 @@ class OrderCleanupService:
                     .where(
                         and_(
                             Session.status == SessionStatus.SCHEDULED,
-                            Session.start_datetime <= current_time
+                            # Compare with timezone-naive current time to match database storage format
+                            Session.start_datetime <= current_time_naive
                         )
                     )
                     .values(status=SessionStatus.ONGOING)
@@ -161,7 +167,8 @@ class OrderCleanupService:
                         and_(
                             Session.status != SessionStatus.CANCELLED,
                             Session.status != SessionStatus.COMPLETED,
-                            Session.end_datetime < current_time
+                            # Compare with timezone-naive current time to match database storage format
+                            Session.end_datetime < current_time_naive
                         )
                     )
                     .values(status=SessionStatus.COMPLETED)

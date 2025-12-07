@@ -48,7 +48,7 @@ class AdminAuthBackend(AuthenticationBackend):
 
             if user and verify_password(password, user.password_hash):
                 # Check if user is admin
-                if user.role and user.role.name == "admin":
+                if user.role and user.role.name == "admin" or user.role.name == "super_admin" or user.role.name == "staff":
                     # Store user in session
                     request.session.update({"user_id": user.id, "email": user.email, "role": user.role.name})
                     return True
@@ -72,8 +72,8 @@ class AdminAuthBackend(AuthenticationBackend):
             from sqlalchemy import select
             result = await db.execute(select(User).filter(User.id == user_id))
             user = result.scalar_one_or_none()
-            
-            if user and user.role and user.role.name == "admin":
+
+            if user.role and user.role.name == "admin" or user.role.name == "super_admin" or user.role.name == "staff":
                 return True
         
         return False

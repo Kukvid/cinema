@@ -1530,6 +1530,19 @@ async def create_sessions(db: AsyncSession, films: list, halls: list):
     for day_offset in range(14):
         session_date = date.today() + timedelta(days=day_offset)
 
+        # Check if sessions already exist for this date to avoid duplicates
+        existing_sessions_result = await db.execute(
+            select(Session).filter(
+                func.date(Session.start_datetime) == session_date
+            )
+        )
+        existing_sessions = existing_sessions_result.scalars().all()
+
+        # Skip creating sessions for this date if they already exist
+        if existing_sessions:
+            print(f"   skipping date {session_date} - sessions already exist")
+            continue
+
         # For each hall, fill all 6 time slots
         for hall in halls:
             # Select 6 random films for this hall today (one per slot)
@@ -1915,7 +1928,7 @@ async def create_orders_and_tickets(db: AsyncSession, users: list, sessions: lis
                         quantity=quantity,
                         unit_price=item.price,
                         total_price=item.price * quantity,
-                        status=PreorderStatus.completed,
+                        status=PreorderStatus.COMPLETED,
                     )
                     db.add(preorder)
                     concession_preorders.append(preorder)

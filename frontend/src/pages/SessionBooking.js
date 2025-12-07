@@ -100,6 +100,24 @@ const SessionBooking = () => {
         }
     }, [id, isAuthenticated]);
 
+    // Эффект для очистки состояния при размонтировании компонента
+    useEffect(() => {
+        // Функция очистки, которая выполнится при размонтировании
+        return () => {
+            console.log("SessionBooking unmounting, clearing state...");
+            setSelectedSeats([]);
+            setSelectedConcessions({});
+            setAppliedPromo(null);
+            setUseBonuses(false);
+            setBonusAmount(0);
+            // Добавьте сюда очистку других состояний, связанных с выбором пользователя,
+            // например, ошибки, загрузка и т.д., если они не должны сохраняться
+            // setError(null);
+            // setBookingLoading(false);
+            // и т.д.
+        };
+    }, []);
+
     const loadData = async () => {
         try {
             setLoading(true);
@@ -301,6 +319,21 @@ const SessionBooking = () => {
 
             const bookingData = {
                 tickets: tickets,
+                // Добавляем информацию о товарах из кинобара в основной заказ
+                concession_preorders: Object.entries(selectedConcessions).map(([concessionId, quantity]) => {
+                    const concessionItem = concessions.find(
+                        (item) => item.id === parseInt(concessionId)
+                    );
+                    if (concessionItem && quantity > 0) {
+                        return {
+                            concession_item_id: parseInt(concessionId),
+                            quantity: quantity,
+                            unit_price: concessionItem.price,
+                            total_price: parseFloat((concessionItem.price * quantity).toFixed(2))
+                        };
+                    }
+                    return null;
+                }).filter(Boolean), // Убираем null значения
                 total_order_amount: totalOrderAmount, // передаем общую сумму заказа
                 promocode_code: appliedPromo?.code || undefined,
                 use_bonus_points: useBonuses
@@ -310,38 +343,7 @@ const SessionBooking = () => {
 
             const booking = await bookingsAPI.createBooking(bookingData);
 
-            // Если есть выбранные concession items, создаем предзаказы
-            if (Object.keys(selectedConcessions).length > 0) {
-                try {
-                    // Подготавливаем список всех предзаказов для отправки за один раз
-                    const preordersList = [];
-                    for (const [concessionId, quantity] of Object.entries(
-                        selectedConcessions
-                    )) {
-                        const concessionItem = concessions.find(
-                            (item) => item.id === parseInt(concessionId)
-                        );
-                        if (concessionItem && quantity > 0) {
-                            preordersList.push({
-                                order_id: booking.id,
-                                concession_item_id: parseInt(concessionId),
-                                quantity: quantity,
-                                unit_price: concessionItem.price,
-                            });
-                        }
-                    }
-
-                    // Создаем все предзаказы за один вызов, чтобы у них был одинаковый код получения
-                    if (preordersList.length > 0) {
-                        await concessionsAPI.createPreorderBatch(preordersList);
-                    }
-                } catch (preorderError) {
-                    console.error("Failed to create preorders:", preorderError);
-                    // Не прерываем основной заказ, если не удалось создать предзаказы на концессию
-                }
-            }
-
-            // Вместо автоматической оплаты, перенаправляем на страницу оплаты
+            // Вместо отдельного создания предзаказов, всё происходит в одном запросе
             navigate(`/payment/${booking.id}`);
         } catch (err) {
             console.error("Booking failed:", err);

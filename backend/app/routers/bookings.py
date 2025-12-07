@@ -1,35 +1,38 @@
-from datetime import datetime, timedelta
 from typing import List, Annotated
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
-from sqlalchemy.orm import selectinload
-from pydantic import BaseModel
+from typing import List, Annotated
 
-from app.database import get_db
 from app.config import get_settings
-from app.models.order import Order
-from app.models.ticket import Ticket
-from app.models.session import Session
-from app.models.seat import Seat
-from app.models.payment import Payment
+from app.database import get_db
 from app.models.bonus_account import BonusAccount
 from app.models.bonus_transaction import BonusTransaction
-from app.models.user import User
-from app.models.concession_preorder import ConcessionPreorder
 from app.models.concession_item import ConcessionItem
+from app.models.concession_preorder import ConcessionPreorder
 from app.models.enums import (
     OrderStatus, TicketStatus, PaymentStatus, SalesChannel,
     BonusTransactionType, PaymentMethod, PreorderStatus
 )
-from app.schemas.order import OrderCreate, OrderWithTickets, OrderWithTicketsAndPayment, PaymentResponsePublic, ConcessionPreorderResponse, ConcessionItemResponse, OrderCountsResponse
-from app.schemas.ticket import TicketResponse
+from app.models.order import Order
+from app.models.payment import Payment
+from app.models.seat import Seat
+from app.models.session import Session
+from app.models.ticket import Ticket
+from app.models.user import User
 from app.routers.auth import get_current_active_user
-from app.utils.qr_generator import generate_qr_code, generate_order_qr
+from app.schemas.order import OrderCreate, OrderWithTickets, OrderWithTicketsAndPayment, PaymentResponsePublic, \
+    ConcessionPreorderResponse, ConcessionItemResponse, OrderCountsResponse
+from app.schemas.ticket import TicketResponse
 from app.services.promocode_service import validate_promocode, increment_usage
+from app.utils.qr_generator import generate_qr_code, generate_order_qr
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import select, and_, func, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from datetime import datetime
 import pytz
 import secrets
+from datetime import timedelta
 
 router = APIRouter()
 
@@ -53,7 +56,16 @@ async def create_booking(
         if not session:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Session with id {ticket_data.session_id} not found"
+                detail=f"Сеанс с id {ticket_data.session_id} не найден"
+            )
+
+        # Check if session is in the past
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        current_time = datetime.now(moscow_tz).replace(tzinfo=None)
+        if session.start_datetime < current_time:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Нельзя забронировать билеты на прошедший сеанс"
             )
 
         # Get seat
@@ -63,17 +75,17 @@ async def create_booking(
         if not seat:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Seat with id {ticket_data.seat_id} not found"
+                detail=f"Место с id {ticket_data.seat_id} не найдено"
             )
 
         # Check if seat is available
         if not seat.is_available:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Seat {seat.row_number}-{seat.seat_number} is not available"
+                detail=f"Место {seat.row_number}-{seat.seat_number} недоступно"
             )
 
-        # Check if seat is already booked for this session
+        # Check if seat is already booked for this session with row-level locking to prevent race conditions
         result = await db.execute(
             select(Ticket).filter(
                 and_(
@@ -81,14 +93,14 @@ async def create_booking(
                     Ticket.seat_id == ticket_data.seat_id,
                     Ticket.status.in_([TicketStatus.RESERVED, TicketStatus.PAID])
                 )
-            )
+            ).with_for_update()  # Add row-level locking to prevent race conditions
         )
         existing_ticket = result.scalar_one_or_none()
 
         if existing_ticket:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Seat {seat.row_number}-{seat.seat_number} is already booked for this session"
+                detail=f"Место {seat.row_number}-{seat.seat_number} уже забронировано на этот сеанс"
             )
 
         # Use session price if not specified
@@ -141,16 +153,16 @@ async def create_booking(
         if not bonus_account:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Bonus account not found"
+                detail="Бонусный счет не найден"
             )
 
         if bonus_account.balance < booking_data.use_bonus_points:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Insufficient bonus points"
+                detail="Недостаточно бонусных баллов"
             )
 
-        bonus_deduction = min(booking_data.use_bonus_points, total_amount - discount_amount)
+        bonus_deduction = booking_data.use_bonus_points
 
         # Check bonus deduction limits
         settings = get_settings()
@@ -159,8 +171,11 @@ async def create_booking(
         if bonus_deduction > max_bonus_amount:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Bonus deduction cannot exceed {settings.BONUS_MAX_PERCENTAGE}% of order amount after discounts"
+                detail=f"Вычет бонусов не может превышать {settings.BONUS_MAX_PERCENTAGE}% от суммы заказа после скидок"
             )
+
+        # Deduct bonus points from user's account
+        bonus_account.balance -= bonus_deduction
 
     final_amount = total_amount - discount_amount - bonus_deduction
 
@@ -169,11 +184,10 @@ async def create_booking(
     if final_amount < Decimal(settings.BONUS_MIN_PAYMENT_AMOUNT):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Final order amount cannot be less than {settings.BONUS_MIN_PAYMENT_AMOUNT} ₽ after applying bonuses and discounts"
+            detail=f"Окончательная сумма заказа не может быть меньше {settings.BONUS_MIN_PAYMENT_AMOUNT} ₽ после применения бонусов и скидок"
         )
 
     # Create order
-    from datetime import timedelta
     moscow_tz = pytz.timezone('Europe/Moscow')
     current_time = datetime.now(moscow_tz).replace(tzinfo=None)
     order_number = f"ORD-{current_time.strftime('%Y%m%d')}-{secrets.token_hex(4).upper()}"
@@ -190,11 +204,21 @@ async def create_booking(
         total_amount=total_amount,
         discount_amount=discount_amount + bonus_deduction,
         final_amount=final_amount,
-        status=OrderStatus.created
+        status=OrderStatus.pending_payment
     )
 
     db.add(new_order)
     await db.flush()
+
+    # Create transaction record for the deduction
+    bonus_transaction = BonusTransaction(
+        bonus_account_id=bonus_account.id,
+        order_id=new_order.id,  # Will be updated after order creation
+        transaction_date=current_time,  # Use the same creation time as the order
+        amount=-bonus_deduction,  # Negative amount to indicate deduction
+        transaction_type=BonusTransactionType.DEDUCTION,
+    )
+    db.add(bonus_transaction)
 
     # Generate QR code for the order
     order_qr = generate_order_qr(new_order.id)
@@ -216,25 +240,93 @@ async def create_booking(
         db.add(new_ticket)
         created_tickets.append(new_ticket)
 
+    # Add concession items to the total amount and process preorders
+    created_concession_preorders = []
+    if booking_data.concession_preorders:
+        for preorder_data in booking_data.concession_preorders:
+            # Validate concession item exists
+            concession_item_result = await db.execute(
+                select(ConcessionItem)
+                .filter(ConcessionItem.id == preorder_data.concession_item_id)
+            )
+            concession_item = concession_item_result.scalar_one_or_none()
+
+            if not concession_item:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Товар из кинобара с id {preorder_data.concession_item_id} не найден"
+                )
+
+            if concession_item.stock_quantity < preorder_data.quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Недостаточно товара {preorder_data.concession_item_id} на складе. Доступно: {concession_item.stock_quantity}"
+                )
+
+            # Calculate total price
+            total_price = Decimal(str(preorder_data.unit_price)) * Decimal(str(preorder_data.quantity))
+
+            # Add to the order's total amount (this includes both tickets and concession items)
+            total_amount += total_price
+
+            # Create preorder
+            new_preorder = ConcessionPreorder(
+                order_id=new_order.id,
+                concession_item_id=preorder_data.concession_item_id,
+                quantity=preorder_data.quantity,
+                unit_price=preorder_data.unit_price,
+                total_price=total_price,
+                status=PreorderStatus.PENDING,
+            )
+
+            # Update stock
+            concession_item.stock_quantity -= preorder_data.quantity
+
+            db.add(new_preorder)
+            created_concession_preorders.append(new_preorder)
+
+    # Recalculate final amount with the updated total_amount that now includes concession items
+    final_amount = total_amount - discount_amount - bonus_deduction
+    new_order.total_amount = total_amount
+    new_order.final_amount = final_amount
+
     await db.commit()
     await db.refresh(new_order)
 
-    # Refresh tickets to get their IDs
+    # Refresh tickets and preorders to get their IDs
     for ticket in created_tickets:
         await db.refresh(ticket)
 
-    return OrderWithTickets(
-        id=new_order.id,
-        user_id=new_order.user_id,
-        promocode_id=new_order.promocode_id,
-        order_number=new_order.order_number,
-        created_at=new_order.created_at,
-        expires_at=new_order.expires_at,
-        total_amount=new_order.total_amount,
-        discount_amount=new_order.discount_amount,
-        final_amount=new_order.final_amount,
-        status=new_order.status,
-        tickets=[TicketResponse.model_validate(ticket) for ticket in created_tickets]
+    for preorder in created_concession_preorders:
+        await db.refresh(preorder)
+
+    # Fetch the complete order with related data for response
+    complete_order_result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.tickets).selectinload(Ticket.session).selectinload(Session.film))
+        .options(selectinload(Order.tickets).selectinload(Ticket.seat))
+        .options(selectinload(Order.promocode))
+        .options(selectinload(Order.concession_preorders).selectinload(ConcessionPreorder.concession_item))
+        .filter(Order.id == new_order.id)
+    )
+    complete_order = complete_order_result.scalar_one()
+
+    # Create response with both tickets and concession preorders
+    return OrderWithTicketsAndPayment(
+        id=complete_order.id,
+        user_id=complete_order.user_id,
+        promocode_id=complete_order.promocode_id,
+        order_number=complete_order.order_number,
+        created_at=complete_order.created_at,
+        expires_at=complete_order.expires_at,
+        total_amount=complete_order.total_amount,
+        discount_amount=complete_order.discount_amount,
+        final_amount=complete_order.final_amount,
+        status=complete_order.status,
+        qr_code=complete_order.qr_code,
+        tickets=[TicketResponse.model_validate(ticket) for ticket in complete_order.tickets],
+        payment=None,  # Payment will be created later when order is paid
+        concession_preorders=[ConcessionPreorderResponse.model_validate(preorder) for preorder in complete_order.concession_preorders]
     )
 
 
@@ -460,18 +552,18 @@ async def cancel_pending_order(
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found or does not belong to current user"
+            detail="Заказ не найден или не принадлежит текущему пользователю"
         )
 
     # Check if the order can be cancelled (must be in pending_payment status)
-    if order.status != OrderStatus.PENDING_PAYMENT:
+    if order.status != OrderStatus.pending_payment:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only orders in pending payment status can be cancelled"
+            detail="Отмена возможна только для заказов в ожидании оплаты"
         )
 
     # Cancel the order
-    order.status = OrderStatus.CANCELLED
+    order.status = OrderStatus.cancelled
 
     # Update ticket statuses back to available
     tickets_result = await db.execute(
@@ -480,7 +572,7 @@ async def cancel_pending_order(
     tickets = tickets_result.scalars().all()
 
     for ticket in tickets:
-        ticket.status = TicketStatus.AVAILABLE  # Return to available since payment wasn't completed
+        ticket.status = TicketStatus.CANCELLED  # Return to available since payment wasn't completed
 
     # Update concession preorders
     preorders_result = await db.execute(
@@ -496,8 +588,73 @@ async def cancel_pending_order(
         await db.execute(
             update(ConcessionItem)
             .where(ConcessionItem.id == preorder.concession_item_id)
-            .values(quantity=ConcessionItem.quantity + preorder.quantity)
+            .values(stock_quantity=ConcessionItem.stock_quantity + preorder.quantity)
         )
+
+    # Return bonus points that were used for the order if any
+    bonus_account_result = await db.execute(
+        select(BonusAccount).filter(BonusAccount.user_id == current_user.id)
+    )
+    bonus_account = bonus_account_result.scalar_one_or_none()
+
+    if bonus_account:
+        # Find bonus transactions related to this order that were for deductions
+        bonus_deduction_transactions = await db.execute(
+            select(BonusTransaction).filter(
+                and_(
+                    BonusTransaction.bonus_account_id == bonus_account.id,
+                    BonusTransaction.order_id == order.id,
+                    BonusTransaction.transaction_type == BonusTransactionType.DEDUCTION
+                )
+            )
+        )
+        deduction_transactions = bonus_deduction_transactions.scalars().all()
+
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        current_time = datetime.now(moscow_tz).replace(tzinfo=None)
+
+        # Return each deduction by adding back to balance and creating accrual transaction
+        for deduction_tx in deduction_transactions:
+            # Add back the deducted amount to the user's bonus account
+            bonus_account.balance += abs(deduction_tx.amount)
+
+            # Create bonus transaction record for return of the originally deducted points
+            bonus_return_transaction = BonusTransaction(
+                bonus_account_id=bonus_account.id,
+                order_id=order.id,  # Link to the order being cancelled
+                transaction_date=current_time,
+                amount=abs(deduction_tx.amount),
+                transaction_type=BonusTransactionType.ACCRUAL,
+            )
+            db.add(bonus_return_transaction)
+
+        # Also remove any bonus points that were accrued for this order
+        # (if a system gives bonuses for making orders, but order gets cancelled)
+        bonus_accrual_transactions = await db.execute(
+            select(BonusTransaction).filter(
+                and_(
+                    BonusTransaction.bonus_account_id == bonus_account.id,
+                    BonusTransaction.order_id == order.id,
+                    BonusTransaction.transaction_type == BonusTransactionType.ACCRUAL
+                )
+            )
+        )
+        accrual_transactions = bonus_accrual_transactions.scalars().all()
+
+        for accrual_tx in accrual_transactions:
+            # Subtract the accrued amount from the user's bonus account
+            bonus_account.balance -= accrual_tx.amount
+
+            # Create bonus transaction record for the removal of accrued points
+            bonus_removal_transaction = BonusTransaction(
+                bonus_account_id=bonus_account.id,
+                order_id=order.id,  # Link to the order being cancelled
+                transaction_date=current_time,
+                amount=-accrual_tx.amount,  # Negative amount to indicate removal
+                transaction_type=BonusTransactionType.DEDUCTION,
+                description=f"Удаление бонусов при отмене заказа {order.order_number}"
+            )
+            db.add(bonus_removal_transaction)
 
     await db.commit()
 
@@ -527,14 +684,41 @@ async def return_order(
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found or does not belong to current user"
+            detail="Заказ не найден или не принадлежит текущему пользователю"
         )
 
     # Check if the order can be returned (must be paid or pending_payment)
-    if order.status not in [OrderStatus.paid, OrderStatus.pending_payment]:
+    if order.status not in [OrderStatus.paid]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only paid or pending payment orders can be returned"
+            detail="Возврат возможен только для оплаченных заказов"
+        )
+
+    # Get all tickets and preorders for validation
+    tickets_result = await db.execute(
+        select(Ticket).filter(Ticket.order_id == order.id)
+    )
+    tickets = tickets_result.scalars().all()
+
+    # Check if any tickets have already been used
+    used_tickets = [ticket for ticket in tickets if ticket.status == TicketStatus.USED]
+    if used_tickets:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Невозможно вернуть заказ с использованными билетами. {len(used_tickets)} билет(ов) уже использован(ы)."
+        )
+
+    # Get all preorders and check if any have been completed
+    preorders_result = await db.execute(
+        select(ConcessionPreorder).filter(ConcessionPreorder.order_id == order.id)
+    )
+    preorders = preorders_result.scalars().all()
+
+    completed_preorders = [preorder for preorder in preorders if preorder.status == PreorderStatus.COMPLETED]
+    if completed_preorders:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Невозможно вернуть заказ с выданными товарами из кинобара. {len(completed_preorders)} товар(ов) уже выдан(ы)."
         )
 
     # Find the earliest session datetime for this order
@@ -549,15 +733,22 @@ async def return_order(
     if not session_datetimes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Order has no associated sessions"
+            detail="У заказа нет связанных сеансов"
         )
 
     earliest_session_time = min(session_datetimes)
 
-    # Calculate refund amount based on the time until session
+    # Calculate time until session
     moscow_tz = pytz.timezone('Europe/Moscow')
     current_time = datetime.now(moscow_tz).replace(tzinfo=None)
     time_to_session = earliest_session_time - current_time
+
+    # Check if session starts in less than 10 minutes - don't allow return
+    if time_to_session.total_seconds() < 600:  # 600 seconds = 10 minutes
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Невозможно вернуть заказ: сеанс начинается менее чем через 10 минут"
+        )
 
     # Calculate refund percentage based on user requirements
     if time_to_session.days < 1:
@@ -571,99 +762,119 @@ async def return_order(
     total_refund_amount = order.final_amount * refund_percentage
 
     # Process the return
-    # 1. Cancel all tickets
-    tickets_result = await db.execute(
-        select(Ticket).filter(Ticket.order_id == order.id)
-    )
-    tickets = tickets_result.scalars().all()
-
+    # 1. Cancel all tickets (tickets already fetched above)
     for ticket in tickets:
-        ticket.status = TicketStatus.cancelled
+        ticket.status = TicketStatus.CANCELLED
 
-    # 2. Return concession preorders to inventory
-    preorders_result = await db.execute(
-        select(ConcessionPreorder).filter(ConcessionPreorder.order_id == order.id)
-    )
-    preorders = preorders_result.scalars().all()
-
+    # 2. Return concession preorders to inventory (preorders already fetched above)
     for preorder in preorders:
         # Return items to inventory by changing status back
-        preorder.status = PreorderStatus.cancelled
+        preorder.status = PreorderStatus.CANCELLED
         # Update concession item quantity
         concession_item_result = await db.execute(
             select(ConcessionItem).filter(ConcessionItem.id == preorder.concession_item_id)
         )
         concession_item = concession_item_result.scalar_one_or_none()
         if concession_item:
-            concession_item.quantity += preorder.quantity
+            concession_item.stock_quantity += preorder.quantity
 
-    # 3. Process bonus return - bonuses are always returned fully when order is cancelled
-    # Calculate how many bonus points were used in the order
-    bonus_used = Decimal("0.00")
-    if order.discount_amount > Decimal("0.00"):
-        # Find which part of the discount came from bonuses (vs promocodes)
-        # For this implementation, we assume all discount amount that came from bonus points needs to be returned
-        # In a more sophisticated system, we'd differentiate between promocode and bonus discounts
-
-        # Return bonus points to user's account
-        bonus_account_result = await db.execute(
-            select(BonusAccount).filter(BonusAccount.user_id == current_user.id)
-        )
-        bonus_account = bonus_account_result.scalar_one_or_none()
-
-        if bonus_account:
-            # For this implementation, assume all discount was from bonuses if the user used bonus points
-            # In practice, there might be both promocode and bonus discounts
-            # For now, we'll return the amount that was deducted as bonuses
-            original_bonus_deduction = order.discount_amount
-            bonus_account.balance += original_bonus_deduction
-            bonus_used = original_bonus_deduction
-
-            # Create bonus transaction record for return
-            bonus_return_transaction = BonusTransaction(
-                user_id=current_user.id,
-                transaction_type=BonusTransactionType.ACCRUAL,
-                amount=original_bonus_deduction,
-                description=f"Return of bonus points from returned order {order.order_number}"
-            )
-            db.add(bonus_return_transaction)
-
-    # Also if the order had bonuses spent for film ordering, we need to return those back
-    # Look for any bonus transactions that were for film ordering deductions
-    bonus_film_transactions_result = await db.execute(
-        select(BonusTransaction)
-        .filter(
-            and_(
-                BonusTransaction.order_id == order.id,
-                BonusTransaction.transaction_type == BonusTransactionType.DEDUCTION,
-                BonusTransaction.description.like("%film%")  # Assuming film-related bonus deductions have "film" in description
-            )
-        )
+    # 3. Process bonus return - return bonuses that were used for the order and remove bonuses that were accrued for the order
+    bonus_account_result = await db.execute(
+        select(BonusAccount).filter(BonusAccount.user_id == current_user.id)
     )
-    bonus_film_transactions = bonus_film_transactions_result.scalars().all()
+    bonus_account = bonus_account_result.scalar_one_or_none()
 
-    for film_bonus_tx in bonus_film_transactions:
-        # Return the film bonus amount to the user's bonus account
-        if bonus_account:
-            bonus_account.balance += abs(film_bonus_tx.amount)
-
-            # Create a reversal transaction record for film bonus return
-            film_bonus_return_transaction = BonusTransaction(
-                user_id=current_user.id,
-                transaction_type=BonusTransactionType.ACCRUAL,
-                amount=abs(film_bonus_tx.amount),
-                description=f"Return of film bonus points from returned order {order.order_number}"
+    if bonus_account:
+        # Return any bonus points that were used for discounts on this order
+        if order.discount_amount > Decimal("0.00"):
+            # Find bonus transactions related to this order that were for deductions
+            bonus_deduction_transactions = await db.execute(
+                select(BonusTransaction).filter(
+                    and_(
+                        BonusTransaction.bonus_account_id == bonus_account.id,
+                        BonusTransaction.order_id == order.id,
+                        BonusTransaction.transaction_type == BonusTransactionType.DEDUCTION
+                    )
+                )
             )
-            db.add(film_bonus_return_transaction)
+            deduction_transactions = bonus_deduction_transactions.scalars().all()
+
+            # Return each deduction by creating accrual transactions
+            for deduction_tx in deduction_transactions:
+                # Add back the deducted amount to the user's bonus account
+                bonus_account.balance += abs(deduction_tx.amount)
+
+                # Create bonus transaction record for return of the originally deducted points
+                bonus_return_transaction = BonusTransaction(
+                    bonus_account_id=bonus_account.id,
+                    order_id=order.id,  # Link to the order being returned
+                    transaction_date=current_time,
+                    amount=abs(deduction_tx.amount),
+                    transaction_type=BonusTransactionType.ACCRUAL,
+                )
+                db.add(bonus_return_transaction)
+
+        # Also remove any bonus points that were accrued for this order
+        bonus_accrual_transactions = await db.execute(
+            select(BonusTransaction).filter(
+                and_(
+                    BonusTransaction.bonus_account_id == bonus_account.id,
+                    BonusTransaction.order_id == order.id,
+                    BonusTransaction.transaction_type == BonusTransactionType.ACCRUAL
+                )
+            )
+        )
+        accrual_transactions = bonus_accrual_transactions.scalars().all()
+
+        for accrual_tx in accrual_transactions:
+            # Subtract the accrued amount from the user's bonus account
+            bonus_account.balance -= accrual_tx.amount
+
+            # Create bonus transaction record for the removal of accrued points
+            bonus_removal_transaction = BonusTransaction(
+                bonus_account_id=bonus_account.id,
+                order_id=order.id,  # Link to the order being returned
+                transaction_date=current_time,
+                amount=-accrual_tx.amount,  # Negative amount to indicate removal
+                transaction_type=BonusTransactionType.DEDUCTION,
+            )
+            db.add(bonus_removal_transaction)
 
     # 4. Process refund to original payment method
     if order.status == OrderStatus.paid:
         # Note: In a real system, you'd need to interact with payment gateway to process actual refund
-        # For now, we just calculate what would be refunded
-        pass
+        # For now, we'll create a refund payment record to track the refund
 
-    # 5. Update order status to cancelled
-    order.status = OrderStatus.cancelled
+        # Get the original payment that was made for this order
+        original_payment_result = await db.execute(
+            select(Payment)
+            .filter(Payment.order_id == order.id)
+            .order_by(Payment.payment_date.desc())
+        )
+        payments = original_payment_result.scalars().all()
+        original_payment = payments[0] if payments else None
+
+        if original_payment:
+            # Create a refund payment record
+
+            moscow_tz = pytz.timezone('Europe/Moscow')
+            refund_time = datetime.now(moscow_tz).replace(tzinfo=None)
+            refund_transaction_id = f"REF-{refund_time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(4).upper()}"
+
+            refund_payment = Payment(
+                order_id=order.id,
+                payment_date=refund_time,
+                amount=total_refund_amount,  # Negative amount for refund
+                payment_method=original_payment.payment_method,  # Same payment method as original
+                transaction_id=refund_transaction_id,
+                status=PaymentStatus.REFUNDED,
+                card_last_four=original_payment.card_last_four,  # Same card for reference
+            )
+            db.add(refund_payment)
+
+    # 5. Update order status to refunded
+    # Keep order amounts unchanged - they should reflect the original order value including concessions
+    order.status = OrderStatus.refunded
 
     # Commit all changes
     await db.commit()
@@ -713,7 +924,7 @@ async def get_order_by_qr(
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order or ticket not found"
+            detail="Заказ или билет не найден"
         )
 
     # Get all tickets and concession preorders for this order
@@ -780,7 +991,7 @@ async def get_orders_by_pickup_code(
     if not preorders:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Orders with this pickup code not found"
+            detail="Заказы с этим кодом получения не найдены"
         )
 
     # Get unique orders associated with these preorders
@@ -856,10 +1067,10 @@ async def update_order_status(
 ):
     """Update order status - for admin use."""
     # Verify user has admin rights
-    if current_user.role not in [UserRoles.ADMIN, UserRoles.SUPER_ADMIN, UserRoles.STAFF]:
+    if current_user.role not in [UserRoles.admin, UserRoles.super_admin, UserRoles.staff]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins and staff can update order status"
+            detail="Только администраторы и сотрудники могут изменять статус заказа"
         )
 
     # Get the order
@@ -871,7 +1082,7 @@ async def update_order_status(
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found"
+            detail="Заказ не найден"
         )
 
     # Update the status - validate using the enum
@@ -880,7 +1091,7 @@ async def update_order_status(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid status"
+            detail="Недопустимый статус"
         )
 
     order.status = new_status.value
@@ -1016,11 +1227,13 @@ async def get_my_bookings_paginated(
         )
         tickets = result.scalars().all()
 
-        # Get payment
+        # Get the most recent payment for the order
         result = await db.execute(
-            select(Payment).filter(Payment.order_id == order.id)
+            select(Payment)
+            .filter(Payment.order_id == order.id)
+            .order_by(Payment.payment_date.desc())
         )
-        payment = result.scalar_one_or_none()
+        payment = result.scalars().first()  # Get the most recent payment or None
 
         # Get concession preorders
         result = await db.execute(
@@ -1158,11 +1371,13 @@ async def get_my_active_orders(
         )
         tickets = tickets_result.scalars().all()
 
-        # Get payment
+        # Get the most recent payment for the order (active orders method)
         payment_result = await db.execute(
-            select(Payment).filter(Payment.order_id == order.id)
+            select(Payment)
+            .filter(Payment.order_id == order.id)
+            .order_by(Payment.payment_date.desc())
         )
-        payment = payment_result.scalar_one_or_none()
+        payment = payment_result.scalars().first()  # Get the most recent payment or None
 
         # Get concession preorders
         concession_result = await db.execute(
@@ -1306,11 +1521,13 @@ async def get_my_past_orders(
         )
         tickets = tickets_result.scalars().all()
 
-        # Get payment
+        # Get the most recent payment for the order (past orders method)
         payment_result = await db.execute(
-            select(Payment).filter(Payment.order_id == order.id)
+            select(Payment)
+            .filter(Payment.order_id == order.id)
+            .order_by(Payment.payment_date.desc())
         )
-        payment = payment_result.scalar_one_or_none()
+        payment = payment_result.scalars().first()  # Get the most recent payment or None
 
         # Get concession preorders
         concession_result = await db.execute(

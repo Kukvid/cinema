@@ -74,7 +74,7 @@ export const ordersAPI = {
     },
 
     markConcessionItemAsCompleted: async (preorderId) => {
-        const response = await axios.post(`/concession_preorders/${preorderId}/complete`);
+        const response = await axios.post(`/concessions/concession_preorders/${preorderId}/complete`);
         return response.data;
     },
 

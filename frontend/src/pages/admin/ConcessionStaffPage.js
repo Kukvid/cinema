@@ -23,6 +23,7 @@ import {
   CheckCircle as CheckIcon,
   Schedule as ScheduleIcon
 } from '@mui/icons-material';
+import { qrScannerAPI } from '../../api/qrScanner';
 import { ordersAPI } from '../../api/orders';
 
 const ConcessionStaffPage = () => {
@@ -36,81 +37,106 @@ const ConcessionStaffPage = () => {
     setSearchResult(null);
 
     if (!qrCode.trim()) {
-      setError('Пожалуйста, введите QR-код или номер заказа');
+      setError('Пожалуйста, введите QR-код');
       return;
     }
 
     try {
-      const order = await ordersAPI.getOrderByQR(qrCode);
-      if (order) {
-        setSearchResult(order);
+      // Try to validate as concession preorder first
+      const validationResponse = await qrScannerAPI.validateConcession(qrCode);
+
+      // Check if it's a single preorder or multiple items from an order
+      if (validationResponse.concession_preorders) {
+        // Multiple items from order QR code
+        setSearchResult({
+          type: 'multiple_concession',
+          data: validationResponse,
+          message: validationResponse.message,
+          status: validationResponse.status
+        });
+      } else if (validationResponse.preorder) {
+        // Single preorder
+        setSearchResult({
+          type: 'concession',
+          data: validationResponse.preorder,
+          message: validationResponse.message,
+          status: validationResponse.status,
+          is_valid: validationResponse.is_valid
+        });
       } else {
-        setError('Заказ не найден');
+        setError(validationResponse.message || 'Предзаказ не найден');
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Ошибка при поиске заказа');
-    }
-  };
-
-  const handleSearchByCode = async () => {
-    setError('');
-    setSearchResult(null);
-
-    if (!pickupCode.trim()) {
-      setError('Пожалуйста, введите код получения');
-      return;
-    }
-
-    try {
-      const orders = await ordersAPI.getOrdersByPickupCode(pickupCode);
-      if (orders && orders.length > 0) {
-        setSearchResult(orders[0]); // Take the first matching order
-      } else {
-        setError('Заказ с таким кодом не найден');
-      }
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Ошибка при поиске заказа');
+      setError(err.response?.data?.detail || 'QR-код недействителен или не найден');
     }
   };
 
   const handleMarkAsCompleted = async (preorderId) => {
     try {
       await ordersAPI.markConcessionItemAsCompleted(preorderId);
-      // Refresh the search result
-      const order = await ordersAPI.getOrderByQR(qrCode);
-      if (order) {
-        setSearchResult(order);
+      // Refresh the validation by re-scanning the QR code
+      const validationResponse = await qrScannerAPI.validateConcession(qrCode);
+
+      // Check if it's a single preorder or multiple items from an order
+      if (validationResponse.concession_preorders) {
+        // Multiple items from order QR code
+        setSearchResult({
+          type: 'multiple_concession',
+          data: validationResponse,
+          message: validationResponse.message,
+          status: validationResponse.status
+        });
+      } else if (validationResponse.preorder) {
+        // Single preorder
+        setSearchResult({
+          type: 'concession',
+          data: validationResponse.preorder,
+          message: validationResponse.message,
+          status: validationResponse.status,
+          is_valid: validationResponse.is_valid
+        });
+      } else {
+        setError(validationResponse.message || 'Предзаказ не найден');
       }
     } catch (err) {
       setError(err.response?.data?.detail || 'Ошибка при обновлении статуса товара');
     }
   };
 
-  const getAllItemsUsed = (order) => {
-    const allTicketsUsed = order.tickets?.every(ticket => ticket.status === 'used') || true;
-    const allConcessionsUsed = order.concession_preorders?.every(item => item.status === 'completed') || true;
-    return allTicketsUsed && allConcessionsUsed;
-  };
+  const handleMarkAllAsCompleted = async (preorderIds) => {
+    try {
+      // Mark all items as completed
+      const promises = preorderIds.map(preorderId => ordersAPI.markConcessionItemAsCompleted(preorderId));
+      await Promise.all(promises);
 
-  const updateOrderStatusIfNeeded = async (order) => {
-    // Check if all items are used/complete and update order status
-    const allItemsComplete = getAllItemsUsed(order);
-    if (allItemsComplete && order.status !== 'completed') {
-      try {
-        await ordersAPI.updateOrderStatus(order.id, 'completed');
-        // Update the search result
-        setSearchResult(prev => ({ ...prev, status: 'completed' }));
-      } catch (err) {
-        console.error('Error updating order status:', err);
+      // Refresh the validation by re-scanning the QR code
+      const validationResponse = await qrScannerAPI.validateConcession(qrCode);
+
+      // Check if it's a single preorder or multiple items from an order
+      if (validationResponse.concession_preorders) {
+        // Multiple items from order QR code
+        setSearchResult({
+          type: 'multiple_concession',
+          data: validationResponse,
+          message: validationResponse.message,
+          status: validationResponse.status
+        });
+      } else if (validationResponse.preorder) {
+        // Single preorder
+        setSearchResult({
+          type: 'concession',
+          data: validationResponse.preorder,
+          message: validationResponse.message,
+          status: validationResponse.status,
+          is_valid: validationResponse.is_valid
+        });
+      } else {
+        setError(validationResponse.message || 'Предзаказ не найден');
       }
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Ошибка при обновлении статуса товаров');
     }
   };
-
-  useEffect(() => {
-    if (searchResult) {
-      updateOrderStatusIfNeeded(searchResult);
-    }
-  }, [searchResult]);
 
   return (
     <Container maxWidth="lg">
@@ -123,7 +149,7 @@ const ConcessionStaffPage = () => {
           <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
             Сканирование QR-кода заказа
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 3 }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center'}}>
             <TextField
               fullWidth
               label="QR-код заказа"
@@ -146,35 +172,6 @@ const ConcessionStaffPage = () => {
               Проверить
             </Button>
           </Box>
-
-          <Divider sx={{ my: 2 }} />
-
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-            Поиск по коду получения
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            <TextField
-              fullWidth
-              label="Код получения"
-              value={pickupCode}
-              onChange={(e) => setPickupCode(e.target.value)}
-              placeholder="Введите код получения из заказа"
-            />
-            <Button
-              variant="contained"
-              startIcon={<ScheduleIcon />}
-              onClick={handleSearchByCode}
-              sx={{
-                py: 1.5,
-                background: 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)',
-                '&:hover': {
-                  background: 'linear-gradient(135deg, #33aaff 0%, #2196f3 100%)'
-                }
-              }}
-            >
-              Найти
-            </Button>
-          </Box>
         </Paper>
 
         {error && (
@@ -185,92 +182,162 @@ const ConcessionStaffPage = () => {
 
         {searchResult && (
           <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-              Заказ: #{searchResult.order_number}
-            </Typography>
-            
-            <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-              Статус заказа: {getAllItemsUsed(searchResult) ? 'Завершён' : searchResult.status}
-            </Typography>
-            
-            <Chip
-              label={getAllItemsUsed(searchResult) ? 'Завершён' : searchResult.status}
-              color={getAllItemsUsed(searchResult) ? 'success' : 'info'}
-              variant="outlined"
-              sx={{ mb: 3 }}
-            />
-
-            {/* Concession Items Section */}
-            <Typography variant="h6" sx={{ mt: 3, mb: 2, display: 'flex', alignItems: 'center' }}>
-              <ConcessionIcon sx={{ mr: 1, color: '#ffd700' }} />
-              Товары из кинобара
-            </Typography>
-            <List>
-              {searchResult.concession_preorders?.map((item, index) => (
-                <ListItem key={index} divider>
-                  <ListItemIcon>
-                    <ConcessionIcon sx={{ color: item.status === 'completed' ? '#8bc34a' : '#ffd700' }} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={`${item.concession_item?.name || 'Товар'} - ${item.quantity} шт.`}
-                    secondary={`Статус: ${item.status} | Цена: ${item.total_price} ₽ | Код получения: ${item.pickup_code}`}
-                  />
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Chip
-                      label={
-                        item.status === 'completed' ? 'Выдан' : 
-                        item.status === 'ready' ? 'Готов' : 
-                        'В обработке'
-                      }
-                      color={
-                        item.status === 'completed' ? 'success' : 
-                        item.status === 'ready' ? 'info' : 
-                        'default'
-                      }
-                      variant="outlined"
-                    />
-                    {item.status !== 'completed' && (
-                      <Button
-                        variant="contained"
-                        size="small"
-                        startIcon={<CheckIcon />}
-                        onClick={() => handleMarkAsCompleted(item.id)}
-                        disabled={item.status !== 'ready'}
-                      >
-                        Выдать
-                      </Button>
+            {/* Handle single concession item */}
+            {searchResult.type === 'concession' && (
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                  Предзаказ из кинобара
+                </Typography>
+                {searchResult.is_valid !== undefined ? (  // This means it's from QR validation
+                  <Box sx={{ mb: 3 }}>
+                    {searchResult.is_valid ? (
+                      <Typography variant="body1">
+                        {searchResult.message}
+                      </Typography>
+                    ) : (
+                      <Alert severity="info">
+                        {searchResult.message || 'Предзаказ уже выдан или недействителен'}
+                      </Alert>
                     )}
                   </Box>
-                </ListItem>
-              ))}
-            </List>
+                ) : (
+                  <Typography variant="body1" sx={{ mb: 3 }}>
+                    {searchResult.message}
+                  </Typography>
+                )}
 
-            {/* Tickets Section (for reference) */}
-            {searchResult.tickets && searchResult.tickets.length > 0 && (
-              <>
-                <Typography variant="h6" sx={{ mt: 3, mb: 2, display: 'flex', alignItems: 'center' }}>
-                  <CheckIcon as TicketIcon sx={{ mr: 1, color: '#46d369' }} />
-                  Билеты
+                <Card sx={{ mb: 3 }}>
+                  <CardContent>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="h6" color="primary">
+                          {searchResult.data.concession_item_name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Количество: {searchResult.data.quantity} шт.
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Статус: {searchResult.data.status}
+                        </Typography>
+                        {/* <Typography variant="body2" color="text.secondary">
+                          Код получения: {searchResult.data.pickup_code}
+                        </Typography> */}
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="subtitle2">Заказ:</Typography>
+                        <Typography variant="body2">
+                          ID: #{searchResult.data.order_id}
+                        </Typography>
+                        <Chip
+                          label={searchResult.data.status === 'completed' ? 'Выдан' : 'Готов к выдаче'}
+                          color={searchResult.data.status === 'completed' ? 'success' : 'warning'}
+                          variant="outlined"
+                          sx={{ mt: 1 }}
+                        />
+                        {searchResult.data.status !== 'completed' ? (
+                          <Button
+                            variant="contained"
+                            startIcon={<CheckIcon />}
+                            onClick={() => handleMarkAsCompleted(searchResult.data.id)}
+                            sx={{ mt: 2 }}
+                          >
+                            Отметить как выданное
+                          </Button>
+                        ) : (
+                          <Alert severity="success" sx={{ mt: 2 }}>
+                            Товар уже выдан
+                          </Alert>
+                        )}
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              </Box>
+            )}
+
+            {/* Handle multiple concession items from order */}
+            {searchResult.type === 'multiple_concession' && searchResult.data.concession_preorders && (
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                  Товары из кинобара
                 </Typography>
-                <List>
-                  {searchResult.tickets.map((ticket, index) => (
-                    <ListItem key={index} divider>
-                      <ListItemIcon>
-                        <CheckIcon as TicketIcon sx={{ color: ticket.status === 'used' ? '#8bc34a' : '#46d369' }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={`${ticket.session?.film?.title || 'Фильм'} - Ряд ${ticket.seat?.row_number}, Место ${ticket.seat?.seat_number}`}
-                        secondary={`Статус: ${ticket.status} | Цена: ${ticket.price} ₽`}
-                      />
-                      <Chip
-                        label={ticket.status === 'used' ? 'Использован' : 'Доступен'}
-                        color={ticket.status === 'used' ? 'success' : 'default'}
-                        variant="outlined"
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              </>
+
+                {/* Check if order is cancelled/refunded */}
+                {searchResult.data.status === 'order_cancelled_or_refunded' && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {searchResult.data.message}
+                  </Alert>
+                )}
+
+                {/* Common order info */}
+                {searchResult.data.concession_preorders.length > 0 && (
+                  <>
+                    <Card sx={{ mb: 2 }}>
+                      <CardContent>
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={8}>
+                            <Typography variant="h6" color="primary">
+                              Заказ: #{searchResult.data.order?.order_number || 'N/A'}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Статус заказа: {searchResult.data.order?.status === 'refunded' ? 'Возвращен' :
+                                              searchResult.data.order?.status === 'cancelled' ? 'Отменен' :
+                                              searchResult.data.order?.status === 'paid' ? 'Оплачен' : searchResult.data.order?.status}
+                            </Typography>
+                          </Grid>
+                          <Grid item xs={12} md={4}>
+                            <Typography variant="subtitle2">Всего товаров:</Typography>
+                            <Typography variant="body2">
+                              {searchResult.data.concession_preorders.length} шт.
+                            </Typography>
+                          </Grid>
+                        </Grid>
+                      </CardContent>
+                    </Card>
+
+                    {/* Concession items list */}
+                    <List>
+                      {searchResult.data.concession_preorders.map((item, index) => (
+                        <ListItem key={item.id} divider>
+                          <ListItemIcon>
+                            <ConcessionIcon sx={{ color: item.status === 'COMPLETED' ? '#8bc34a' : '#ffd700' }} />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={`${item.concession_item_name} - ${item.quantity} шт.`}
+                            secondary={`Статус: ${item.status === 'COMPLETED' ? 'Выдан' : 'Готов к выдаче'}`}
+                          />
+                          <Chip
+                            label={item.status === 'COMPLETED' ? 'Выдан' : 'Готов к выдаче'}
+                            color={item.status === 'COMPLETED' ? 'success' : 'warning'}
+                            variant="outlined"
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+
+                    {/* Mark all as completed button if not all items are completed and order is not cancelled */}
+                    {searchResult.data.status !== 'order_cancelled_or_refunded' &&
+                     searchResult.data.concession_preorders.some(item => item.status !== 'COMPLETED') && (
+                      <Box sx={{ mt: 2, textAlign: 'center' }}>
+                        <Button
+                          variant="contained"
+                          startIcon={<CheckIcon />}
+                          onClick={() => handleMarkAllAsCompleted(searchResult.data.concession_preorders.map(i => i.id))}
+                          sx={{ py: 1.5 }}
+                        >
+                          Отметить все товары как выданные
+                        </Button>
+                      </Box>
+                    )}
+
+                    {searchResult.data.concession_preorders.every(item => item.status === 'COMPLETED') && (
+                      <Alert severity="success" sx={{ mt: 2 }}>
+                        Все товары уже отмечены как выданные
+                      </Alert>
+                    )}
+                  </>
+                )}
+              </Box>
             )}
           </Paper>
         )}

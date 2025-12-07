@@ -5,7 +5,7 @@ import secrets
 import pytz
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
@@ -14,6 +14,7 @@ from app.models.order import Order
 from app.models.payment import Payment
 from app.models.ticket import Ticket
 from app.models.session import Session
+from app.models.hall import Hall
 from app.models.bonus_account import BonusAccount
 from app.models.bonus_transaction import BonusTransaction
 from app.models.enums import (
@@ -37,36 +38,38 @@ async def process_payment(
     db: AsyncSession = Depends(get_db)
 ):
     """Process payment for an order."""
-    # Get order
+    # Get order with eager loading of related promocode
     result = await db.execute(
-        select(Order).filter(Order.id == order_id)
+        select(Order)
+        .options(selectinload(Order.promocode))
+        .filter(Order.id == order_id)
     )
     order = result.scalar_one_or_none()
 
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Order with id {order_id} not found"
+            detail=f"Заказ с id {order_id} не найден"
         )
 
     # Verify order belongs to current user
     if order.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only pay for your own orders"
+            detail="Вы можете оплачивать только свои заказы"
         )
 
     # Check order status
     if order.status == OrderStatus.paid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Order has already been paid"
+            detail="Заказ уже оплачен"
         )
 
     if order.status == OrderStatus.cancelled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot pay for cancelled order"
+            detail="Нельзя оплатить отменённый заказ"
         )
 
     # Check for special payment cards before amount validation
@@ -84,18 +87,18 @@ async def process_payment(
         amount_validation_needed = False
     elif card_number == FIXED_1500_CARD:
         # Карта на 1500 руб - оплачивает только заказы на 1500 рублей
-        if payment_data.amount != Decimal('1500.00'):
+        if payment_data.amount > Decimal('1500.00'):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Fixed amount card only valid for orders of exactly 1500.00 ₽ (current: {payment_data.amount} ₽)"
+                detail=f"Карта фиксированной суммы действительна только для заказов до 1500.00 ₽ (текущий заказ: {payment_data.amount} ₽)"
             )
         amount_validation_needed = False  # Проверка общей суммы уже выполнена
 
-    # Verify payment amount matches order final_amount (unless it's a special card)
-    if amount_validation_needed and payment_data.amount != order.final_amount:
+    # Для обычных карт (не специальные) не разрешаем оплату - сообщаем о недостатке средств
+    if amount_validation_needed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Payment amount mismatch. Expected: {order.final_amount}, got: {payment_data.amount}"
+            detail=f"Недостаточно средств на карте. Пополните баланс."
         )
 
     # Mock payment processing
@@ -115,7 +118,6 @@ async def process_payment(
         # Let's allow updating payments that are in PENDING or FAILED state
         if existing_payment.status in [PaymentStatus.PENDING, PaymentStatus.FAILED]:
             # Update the existing payment in the database directly
-            from sqlalchemy import update
             await db.execute(
                 update(Payment)
                 .where(Payment.id == existing_payment.id)
@@ -128,16 +130,13 @@ async def process_payment(
                     card_last_four=card_number[-4:] if card_number else None
                 )
             )
-            # Query the updated payment to get the fresh values
-            updated_payment_result = await db.execute(
-                select(Payment).filter(Payment.id == existing_payment.id)
-            )
-            new_payment = updated_payment_result.scalar_one()
+            # The existing_payment object will be updated by SQLAlchemy automatically
+            new_payment = existing_payment
         else:
             # If payment already succeeded, don't allow another payment attempt
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Payment already exists for order {order_id} with status {existing_payment.status.value}. Cannot initiate new payment."
+                detail=f"Платеж уже существует для заказа {order_id} со статусом {existing_payment.status.value}. Невозможно инициировать новый платеж."
             )
     else:
         # Create new payment record
@@ -156,83 +155,60 @@ async def process_payment(
 
     # Simulate payment processing (in real app this would integrate with payment gateway)
     try:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Processing payment for order {order.id}, payment {new_payment.id}")
+
         # Here we could integrate with a real payment gateway
         # For now, we'll simulate successful payment
+        logger.info("Setting payment and order statuses to paid")
         new_payment.status = PaymentStatus.PAID
         order.status = OrderStatus.paid
 
         # Update ticket statuses and generate single order QR code for all tickets and concessions
+        logger.info("Fetching tickets for order")
         result = await db.execute(
             select(Ticket).filter(Ticket.order_id == order.id)
         )
         tickets = result.scalars().all()
+        logger.info(f"Found {len(tickets)} tickets for order {order.id}")
 
         for ticket in tickets:
+            logger.info(f"Updating ticket {ticket.id} status to PAID")
             ticket.status = TicketStatus.PAID
 
         # Generate single QR code for the entire order (tickets + concessions)
+        logger.info("Generating QR code")
         qr_data = f"ORDER-{order.id}-{transaction_id}"
         order.qr_code = generate_qr_code(qr_data)
 
-        # Process bonus deductions if any were requested during booking
-        if order.discount_amount > 0 and order.discount_amount != (order.promocode.discount_amount if order.promocode else 0):
-            # Some of the discount was from bonus points, so we need to debit them
-            bonus_deduction = order.discount_amount - (order.promocode.discount_amount if order.promocode else 0) if order.promocode else order.discount_amount
+        # At this point, the order should already have its discount_amount properly calculated
+        # including any bonus points that were used during booking creation (deductions)
+        # NOW we should accrue bonus points for the successful payment (10% of final amount after discounts)
+        bonus_points = (order.final_amount * Decimal("0.10")).quantize(Decimal("0.01"))
 
-            result = await db.execute(
-                select(BonusAccount).filter(BonusAccount.user_id == current_user.id)
-            )
-            bonus_account = result.scalar_one_or_none()
-
-            if bonus_account:
-                # Deduct the bonus points from the user's account
-                bonus_account.balance -= float(bonus_deduction)
-
-                # Create a bonus transaction record for the deduction
-                bonus_deduction_transaction = BonusTransaction(
-                    bonus_account_id=bonus_account.id,
-                    order_id=order.id,
-                    transaction_date=payment_time,
-                    amount=-float(bonus_deduction),  # Negative amount for deduction
-                    transaction_type=BonusTransactionType.DEDUCTION,
-                    description="Списание бонусов за заказ"
-                )
-                db.add(bonus_deduction_transaction)
-
-        # Add bonus points (10% of total amount)
-        bonus_points = (order.total_amount * Decimal("0.10")).quantize(Decimal("0.01"))
-
-        result = await db.execute(
+        bonus_account_result = await db.execute(
             select(BonusAccount).filter(BonusAccount.user_id == current_user.id)
         )
-        bonus_account = result.scalar_one_or_none()
+        bonus_account = bonus_account_result.scalar_one_or_none()
 
-        if bonus_account:
-            bonus_account.balance += bonus_points
+        if bonus_account and bonus_points > 0:
+            # Add bonus points to user's account
+            bonus_account.balance += float(bonus_points)
 
-            # Create bonus transaction record for the order
-            if tickets:
-                bonus_transaction = BonusTransaction(
-                    bonus_account_id=bonus_account.id,
-                    order_id=order.id,  # Link to the order for which bonus is accrued
-                    transaction_date=payment_time,
-                    amount=bonus_points,
-                    transaction_type=BonusTransactionType.ACCRUAL
-                )
-                db.add(bonus_transaction)
-            else:
-                # Create bonus transaction for the order
-                bonus_transaction = BonusTransaction(
-                    bonus_account_id=bonus_account.id,
-                    order_id=order.id,
-                    transaction_date=payment_time,
-                    amount=bonus_points,
-                    transaction_type=BonusTransactionType.ACCRUAL
-                )
-                db.add(bonus_transaction)
+            # Create bonus transaction record for the accrual
+            bonus_transaction = BonusTransaction(
+                bonus_account_id=bonus_account.id,
+                order_id=order.id,  # Link to the order for which bonus is accrued
+                transaction_date=payment_time,
+                amount=bonus_points,
+                transaction_type=BonusTransactionType.ACCRUAL
+            )
+            db.add(bonus_transaction)
 
+        logger.info("Committing transaction")
         await db.commit()
-        await db.refresh(new_payment)
+        logger.info("Transaction committed successfully")
 
         return PaymentResponse(
             id=new_payment.id,
@@ -244,15 +220,22 @@ async def process_payment(
         )
 
     except Exception as e:
-        # If payment fails, update status
-        new_payment.status = PaymentStatus.FAILED
-        order.status = OrderStatus.pending_payment  # or keep as created?
-        await db.commit()
-        await db.refresh(new_payment)
+        import traceback
+        logger.error(f"Payment processing failed: {str(e)}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+
+        # If payment fails, update status and rollback changes
+        try:
+            logger.info("Attempting to rollback transaction")
+            await db.rollback()
+            logger.info("Transaction rolled back successfully")
+        except Exception as rb_e:
+            logger.error(f"Rollback failed: {str(rb_e)}")
+            logger.error(f"Rollback traceback: {traceback.format_exc()}")
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Payment processing failed: {str(e)}"
+            detail=f"Обработка платежа не удалась: {str(e)}. Проверьте логи для подробностей."
         )
 
 
@@ -273,7 +256,7 @@ async def get_payment_status(
     if not payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Payment for order {order_id} not found"
+            detail=f"Платеж для заказа {order_id} не найден"
         )
 
     return PaymentResponse(
@@ -311,6 +294,9 @@ async def get_payment_details(
         .options(
             selectinload(Ticket.session)
             .selectinload(Session.film),
+            selectinload(Ticket.session)
+            .selectinload(Session.hall)
+            .selectinload(Hall.cinema),
             selectinload(Ticket.seat)
         )
         .filter(Ticket.order_id == order_id)
@@ -324,14 +310,6 @@ async def get_payment_details(
         .filter(ConcessionPreorder.order_id == order_id)
     )
     preorders = preorders_result.scalars().all()
-
-    # Calculate concession total
-    concession_total = sum(float(preorder.total_price) for preorder in preorders)
-
-    # Calculate full total amount including tickets and concessions
-    tickets_total = sum(float(ticket.price) for ticket in tickets)
-    full_total_amount = order.total_amount + Decimal(str(concession_total))
-    full_final_amount = order.final_amount + Decimal(str(concession_total))
 
     # Get payment to retrieve transaction_id
     payment_result = await db.execute(
@@ -349,11 +327,9 @@ async def get_payment_details(
         "order_id": order.id,
         "order_number": order.order_number,
         "status": order.status.value,
-        "total_amount": float(full_total_amount),  # Include concessions
+        "total_amount": float(order.total_amount),
         "discount_amount": float(order.discount_amount),
-        "final_amount": float(full_final_amount),  # Include concessions
-        "tickets_total": float(tickets_total),
-        "concessions_total": float(concession_total),
+        "final_amount": float(order.final_amount),
         "created_at": order.created_at.isoformat() if order.created_at else None,
         "qr_code": order.qr_code,
         "qr_data": qr_data,
@@ -365,9 +341,22 @@ async def get_payment_details(
                 "price": float(ticket.price),
                 "status": ticket.status.value,
                 "session": {
+                    "id": ticket.session.id if ticket.session else None,
+                    "start_datetime": ticket.session.start_datetime.isoformat() if ticket.session and ticket.session.start_datetime else None,
+                    "end_datetime": ticket.session.end_datetime.isoformat() if ticket.session and ticket.session.end_datetime else None,
                     "film": {
                         "title": ticket.session.film.title if ticket.session and ticket.session.film else "Неизвестный фильм"
-                    } if ticket.session else None
+                    } if ticket.session else None,
+                    "hall": {
+                        "id": ticket.session.hall.id if ticket.session and ticket.session.hall else None,
+                        "number": ticket.session.hall.hall_number if ticket.session and ticket.session.hall else None,
+                        "name": ticket.session.hall.name if ticket.session and ticket.session.hall else None,
+                        "cinema_id": ticket.session.hall.cinema_id if ticket.session and ticket.session.hall else None,
+                        "cinema": {
+                            "id": ticket.session.hall.cinema.id if ticket.session and ticket.session.hall and ticket.session.hall.cinema else None,
+                            "name": ticket.session.hall.cinema.name if ticket.session and ticket.session.hall and ticket.session.hall.cinema else None
+                        } if ticket.session and ticket.session.hall and ticket.session.hall.cinema else None
+                    } if ticket.session and ticket.session.hall else None
                 } if ticket.session else None,
                 "seat": {
                     "row_number": ticket.seat.row_number if ticket.seat else None,

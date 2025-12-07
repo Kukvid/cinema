@@ -76,7 +76,7 @@ const FilmDetail = () => {
             setLoading(true);
             const [filmData, sessionsData] = await Promise.all([
                 filmsAPI.getFilmById(id),
-                sessionsAPI.getSessions({ film_id: id }),
+                sessionsAPI.getSessionsByFilmId(id),
             ]);
             setFilm(filmData);
             setSessions(sessionsData);

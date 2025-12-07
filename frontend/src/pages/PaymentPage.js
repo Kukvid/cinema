@@ -40,6 +40,22 @@ const PaymentPage = () => {
     const [error, setError] = useState(null);
     const [paymentSuccess, setPaymentSuccess] = useState(false);
 
+    // Handle redirect after payment success
+    useEffect(() => {
+        let redirectTimer;
+        if (paymentSuccess) {
+            redirectTimer = setTimeout(() => {
+                navigate("/my-orders");
+            }, 2000);
+        }
+
+        return () => {
+            if (redirectTimer) {
+                clearTimeout(redirectTimer);
+            }
+        };
+    }, [paymentSuccess, navigate]);
+
     // Данные формы оплаты
     const [paymentData, setPaymentData] = useState({
         card_number: "",
@@ -158,12 +174,9 @@ const PaymentPage = () => {
                 paymentPayload
             );
 
-            if (result.status === "paid") {
+            if (result.status === "PAID") {
                 setPaymentSuccess(true);
-                // Немедленно перенаправляем на страницу заказов (без задержки или с короткой задержкой)
-                setTimeout(() => {
-                    navigate("/my-orders"); // Перенаправление на страницу моих заказов
-                }, 1500); // Сокращаем задержку для лучшего UX
+                // Redirect handled by useEffect
             } else {
                 setError(result.message || "Ошибка при обработке платежа");
             }

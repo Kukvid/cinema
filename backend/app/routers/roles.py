@@ -22,7 +22,7 @@ async def get_roles(
 ):
     """Get list of roles with pagination and search."""
     # Only admin users should be able to see roles
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can access role management"
@@ -48,7 +48,7 @@ async def get_role(
     db: AsyncSession = Depends(get_db)
 ):
     """Get role by ID."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can access role details"
@@ -73,7 +73,7 @@ async def create_role(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new role."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can create roles"
@@ -105,7 +105,7 @@ async def update_role(
     db: AsyncSession = Depends(get_db)
 ):
     """Update role by ID."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can update roles"
@@ -147,7 +147,7 @@ async def delete_role(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete role by ID."""
-    if not current_user.role or current_user.role.name != "admin":
+    if not current_user.role or current_user.role.name not in [ "admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin users can delete roles"

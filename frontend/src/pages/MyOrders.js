@@ -53,6 +53,7 @@ import Loading from "../components/Loading";
 import { bookingsAPI } from "../api/bookings";
 import { paymentsAPI } from "../api/payments";
 import { ordersAPI } from "../api/orders";
+import { sessionsAPI } from "../api/sessions";
 
 const MyOrders = () => {
     const [activeOrders, setActiveOrders] = useState([]);
@@ -239,19 +240,57 @@ const MyOrders = () => {
     const handleOrderClick = async (order) => {
         setSelectedOrder(order);
         setLoadingDetails(true);
-        // We'll use the payment details API only when the modal opens, to ensure we have the most up-to-date details
         try {
-            const details = await ordersAPI.getOrderDetails(order.id); // Предполагаемый метод
+            const details = await ordersAPI.getOrderDetails(order.id);
+
+            // If the API already returns complete session information with cinema and hall details, use it directly
             setOrderDetails(details);
         } catch (err) {
             console.error("Failed to load order details:", err);
-            // If payment details API fails, use the basic order data that we have
-            setOrderDetails({
-                ...order,
-                tickets: order.tickets || [],
-                concession_preorders: order.concession_preorders || [],
-                qr_code: order.qr_code || null,
-            });
+
+            // Try to enhance the order data by fetching additional session information
+            try {
+                let enhancedOrder = { ...order };
+
+                // Fetch additional session information for each ticket
+                if (order.tickets && order.tickets.length > 0) {
+                    const enhancedTickets = await Promise.all(
+                        order.tickets.map(async (ticket) => {
+                            if (ticket.session_id) {
+                                try {
+                                    const sessionDetails = await sessionsAPI.getSessionById(ticket.session_id);
+                                    // Merge the session details with the ticket
+                                    return {
+                                        ...ticket,
+                                        session: sessionDetails
+                                    };
+                                } catch (sessionErr) {
+                                    console.error(`Failed to load session details for ticket ${ticket.id}:`, sessionErr);
+                                    // Return ticket as is if session details can't be loaded
+                                    return ticket;
+                                }
+                            }
+                            return ticket;
+                        })
+                    );
+
+                    enhancedOrder = {
+                        ...order,
+                        tickets: enhancedTickets
+                    };
+                }
+
+                setOrderDetails(enhancedOrder);
+            } catch (enhancementErr) {
+                console.error("Failed to enhance order data:", enhancementErr);
+                // Fallback to basic order data
+                setOrderDetails({
+                    ...order,
+                    tickets: order.tickets || [],
+                    concession_preorders: order.concession_preorders || [],
+                    qr_code: order.qr_code || null,
+                });
+            }
         } finally {
             setLoadingDetails(false);
         }
@@ -399,9 +438,16 @@ const MyOrders = () => {
     };
 
     const handleReturnOrder = async (orderId) => {
-        // Open confirmation dialog instead of directly processing
-        const order = displayOrders.find(o => o.id === orderId);
-        setOrderToReturn(order);
+        // Load full order details before opening confirmation dialog
+        try {
+            const fullOrderDetails = await ordersAPI.getOrderDetails(orderId);
+            setOrderToReturn(fullOrderDetails);
+        } catch (error) {
+            console.error("Failed to load order details for return:", error);
+            // Fallback to basic order info if detailed info fails
+            const order = displayOrders.find(o => o.id === orderId);
+            setOrderToReturn(order);
+        }
         setReturnConfirmationOpen(true);
     };
 
@@ -447,13 +493,13 @@ const MyOrders = () => {
     const confirmReturnOrder = async () => {
         if (!orderToReturn || returningLoading) return;
 
-        setReturningOrder(orderToReturn.id);
+        setReturningOrder(orderToReturn.order_id);
         setReturningLoading(true);
         setReturnConfirmationOpen(false);
         setError(null);
 
         try {
-            await bookingsAPI.returnOrder(orderToReturn.id);
+            await bookingsAPI.returnOrder(orderToReturn.order_id);
             // Refresh order lists after return
             activeSkipRef.current = 0;
             pastSkipRef.current = 0;
@@ -600,6 +646,7 @@ const MyOrders = () => {
                                     getStatusText={getStatusText}
                                     onPay={handlePayForOrder}
                                     handleReturnOrder={handleReturnOrder}
+                                    handleCancelPendingOrder={handleCancelPendingOrder}
                                     returningLoading={returningLoading}
                                     returningOrder={returningOrder}
                                 />
@@ -690,13 +737,33 @@ const MyOrders = () => {
                     </Typography>
                     {orderToReturn && (
                         <>
-                            {calculateTimeToSession(orderToReturn) ? (
-                                <Box sx={{ mt: 2 }}>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {getTimeToSessionMessage(orderToReturn)}
-                                    </Typography>
-                                </Box>
-                            ) : null}
+                            {/* Информация о возврате денег в зависимости от времени до сеанса */}
+                            {(() => {
+                                const timeInfo = calculateTimeToSession(orderToReturn);
+                                return timeInfo ? (
+                                    <Box sx={{ mt: 2 }}>
+                                        <Typography variant="body2" color="text.secondary" sx={{fontWeight: 'bold'}}>
+                                            {getTimeToSessionMessage(orderToReturn)}
+                                        </Typography>
+                                    </Box>
+                                ) : (
+                                    <Box sx={{ mt: 2 }}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Не удалось определить время до сеанса
+                                        </Typography>
+                                    </Box>
+                                );
+                            })()}
+
+                            {/* Информация о бонусах */}
+                            <Box sx={{ mt: 2 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    Будут возвращены все использованные бонусы
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Бонусы, начисленные за покупку, будут списаны
+                                </Typography>
+                            </Box>
                         </>
                     )}
                 </DialogContent>
@@ -747,6 +814,33 @@ const OrderCard = ({
     returningOrder,
 }) => {
     const isPast = order.status === "cancelled" || order.status === "used";
+
+    // Function to calculate total order amount
+    // The order.final_amount should already include all items (tickets + concessions) at the time of order creation
+    const calculateTotalOrderAmount = (order) => {
+        // First check if we have concession preorders and calculate their total
+        let concessionTotal = 0;
+        if (order.concession_preorders && Array.isArray(order.concession_preorders)) {
+            concessionTotal = order.concession_preorders.reduce((sum, preorder) => {
+                return sum + parseFloat(preorder.total_price || 0);
+            }, 0);
+        }
+
+        // The order.final_amount should already include concession items if they were part of the original order
+        // However, in some API responses the final_amount might not include concessions that were ordered separately
+        // So we calculate based on the available data
+        const ticketsTotal = order.tickets?.reduce((sum, ticket) => sum + parseFloat(ticket.price || 0), 0) || 0;
+
+        // If concessionTotal exists, add it to ticket total
+        const total = ticketsTotal + concessionTotal;
+
+        // If we have a final_amount that's different from our calculated amount,
+        // it might be the correct one that includes all items and discounts
+        const apiFinalAmount = parseFloat(order.final_amount || 0);
+
+        // Use the larger amount as it's more likely to be the correct final amount that includes everything
+        return Math.max(total, apiFinalAmount).toFixed(2);
+    };
 
     return (
         <Card
@@ -890,6 +984,42 @@ const OrderCard = ({
                                                 mb: 1,
                                             }}
                                         >
+                                            <ScheduleIcon
+                                                sx={{ color: "#ffd700", fontSize: 20 }}
+                                            />
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
+                                            >
+                                                Сеанс
+                                            </Typography>
+                                        </Box>
+                                        <Typography
+                                            variant="body1"
+                                            sx={{ fontWeight: 600, ml: 3.5 }}
+                                        >
+                                            {order.tickets[0].session.start_datetime ? new Date(order.tickets[0].session.start_datetime).toLocaleString('ru-RU', {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            }) : "Не указан"}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid
+                                        item
+                                        xs={12}
+                                        sm={6}
+                                    >
+                                        <Box
+                                            sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                                mb: 1,
+                                            }}
+                                        >
                                             <PlaceIcon
                                                 sx={{ color: "#2196f3", fontSize: 20 }}
                                             />
@@ -904,7 +1034,7 @@ const OrderCard = ({
                                             variant="body1"
                                             sx={{ fontWeight: 600, ml: 3.5 }}
                                         >
-                                            {order.tickets[0].session.cinema?.name || "Не указан"}
+                                            {order.tickets[0].session.hall?.cinema?.name || "Не указан"}
                                         </Typography>
                                     </Grid>
                                     <Grid
@@ -1422,6 +1552,100 @@ const OrderDetailsModal = ({
                                                 {order.final_amount} ₽
                                             </Typography>
                                         </Grid>
+                                        {orderDetails && orderDetails.tickets && orderDetails.tickets.length > 0 && orderDetails.tickets[0].session && (
+                                            <>
+                                                {/* Cinema Information */}
+                                                <Grid
+                                                    item
+                                                    xs={12}
+                                                >
+                                                    <Typography
+                                                        variant="body2"
+                                                        color="text.secondary"
+                                                    >
+                                                        Кинотеатр
+                                                    </Typography>
+                                                    <Box
+                                                        sx={{
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: 1,
+                                                        }}
+                                                    >
+                                                        <PlaceIcon
+                                                            sx={{ color: "#2196f3", fontSize: 20 }}
+                                                        />
+                                                        <Typography
+                                                            sx={{ fontWeight: 600 }}
+                                                        >
+                                                            {orderDetails.tickets[0].session.hall.cinema?.name || "Не указан"}
+                                                        </Typography>
+                                                    </Box>
+                                                </Grid>
+                                                {/* Session Time */}
+                                                <Grid
+                                                    item
+                                                    xs={6}
+                                                >
+                                                    <Typography
+                                                        variant="body2"
+                                                        color="text.secondary"
+                                                    >
+                                                        Время сеанса
+                                                    </Typography>
+                                                    <Box
+                                                        sx={{
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: 1,
+                                                        }}
+                                                    >
+                                                        <ScheduleIcon
+                                                            sx={{ color: "#ffd700", fontSize: 20 }}
+                                                        />
+                                                        <Typography
+                                                            sx={{ fontWeight: 600 }}
+                                                        >
+                                                            {orderDetails.tickets[0].session.start_datetime ? new Date(orderDetails.tickets[0].session.start_datetime).toLocaleString('ru-RU', {
+                                                                day: '2-digit',
+                                                                month: '2-digit',
+                                                                year: 'numeric',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit'
+                                                            }) : "Не указано"}
+                                                        </Typography>
+                                                    </Box>
+                                                </Grid>
+                                                {/* Hall Information */}
+                                                <Grid
+                                                    item
+                                                    xs={6}
+                                                >
+                                                    <Typography
+                                                        variant="body2"
+                                                        color="text.secondary"
+                                                    >
+                                                        Зал
+                                                    </Typography>
+                                                    <Box
+                                                        sx={{
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: 1,
+                                                        }}
+                                                    >
+                                                        <MovieIcon
+                                                            sx={{ color: "#ff9800", fontSize: 20 }}
+                                                        />
+                                                        <Typography
+                                                            sx={{ fontWeight: 600 }}
+                                                        >
+                                                            {orderDetails.tickets[0].session.hall?.number ? `Зал ${orderDetails.tickets[0].session.hall.number}` : "Не указан"}
+                                                        </Typography>
+                                                    </Box>
+                                                </Grid>
+                                            </>
+                                        )}
                                         {orderDetails.promocode_id && (
                                             <Grid
                                                 item
@@ -1544,8 +1768,10 @@ const OrderDetailsModal = ({
                                                         </ListItemIcon>
                                                         <ListItemText
                                                             primary={`${ticket.session?.film?.title || "Фильм"} - Ряд ${ticket.seat?.row_number}, Место ${ticket.seat?.seat_number}`}
-                                                            secondary={`Цена: ${ticket.price} ₽ | `}
-                                                            // Статус: ${ticket.status}
+                                                            secondary={
+                                                                `Цена: ${ticket.price} ₽ | Статус: ${ticket.status === 'USED' ? 'Использован' : ticket.status === 'RESERVED' ? 'Забронирован' : ticket.status === 'PAID' ? 'Оплачен' : ticket.status}`
+                        
+                                                            }
                                                         />
                                                     </ListItem>
                                                 )
@@ -1607,7 +1833,7 @@ const OrderDetailsModal = ({
                                                                 </ListItemIcon>
                                                                 <ListItemText
                                                                     primary={`${preorder.concession_item?.name || "Товар"} - ${preorder.quantity} шт.`}
-                                                                    secondary={`Цена: ${preorder.total_price} ₽ | Статус: ${preorder.status} | Код получения: ${preorder.pickup_code}`}
+                                                                    secondary={`Цена: ${preorder.total_price} ₽ | Статус: ${preorder.status === 'COMPLETED' ? 'Выдан' : 'Готов к выдаче'}`}
                                                                 />
                                                             </ListItem>
                                                         )
@@ -1618,8 +1844,8 @@ const OrderDetailsModal = ({
                                     </Grid>
                                 )}
 
-                            {/* QR-код */}
-                            {orderDetails && orderDetails.qr_code && (
+                            {/* QR-код - показываем только если заказ оплачен */}
+                            {orderDetails && orderDetails.qr_code && order.status === "paid" && (
                                 <Grid
                                     item
                                     xs={12}

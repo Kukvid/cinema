@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from app.schemas.ticket import TicketResponse
 from app.routers.auth import get_current_active_user
 
+from app.models.enums import UserRoles
 router = APIRouter()
 
 
@@ -121,10 +122,10 @@ async def validate_ticket(
         )
 
     # Verify user has admin rights
-    if current_user.role not in [UserRoles.ADMIN, UserRoles.SUPER_ADMIN, UserRoles.STAFF]:
+    if current_user.role.name not in [UserRoles.admin, UserRoles.super_admin, UserRoles.staff]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins and staff can validate tickets"
+            detail=f"Only admins and staff can validate tickets. You are {current_user.role.name}"
         )
 
     # Find ticket by QR code
@@ -149,7 +150,8 @@ async def validate_ticket(
     order = result.scalar_one_or_none()
 
     return {
-        "is_valid": ticket.status != TicketStatus.USED,
+        "is_valid": True,  # Always valid for display purposes; use status to determine usability
+        "can_use": ticket.status != TicketStatus.USED,  # Field indicating if ticket can be newly used
         "ticket": TicketResponse.model_validate(ticket),
         "order": {
             "id": order.id if order else None,
@@ -168,7 +170,7 @@ async def mark_ticket_as_used(
 ):
     """Mark a ticket as used - for admin/controller use."""
     # Verify user has admin rights
-    if current_user.role not in [UserRoles.ADMIN, UserRoles.SUPER_ADMIN, UserRoles.STAFF]:
+    if current_user.role.name not in [UserRoles.admin, UserRoles.super_admin, UserRoles.staff]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins and staff can mark tickets as used"
