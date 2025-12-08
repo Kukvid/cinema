@@ -23,8 +23,6 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
-
-# Dependency for FastAPI
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
@@ -37,7 +35,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-# For Alembic and manual DB operations
 async def get_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         return session

@@ -14,6 +14,7 @@ from app.models.user import User
 from app.models.enums import ContractStatus, PaymentStatus
 from app.schemas.contract import RentalContractCreate, RentalContractUpdate, RentalContractResponse
 from app.schemas.payment_history import PaymentHistoryResponse
+from app.schemas.cinema import CinemaResponse
 from app.routers.auth import get_current_active_user
 
 router = APIRouter()
@@ -27,12 +28,18 @@ async def get_contracts(
     status_filter: ContractStatus | None = Query(None, alias="status", description="Filter by status"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_active_user)] = None
 ):
     """Get list of rental contracts with optional filters."""
+
+    # Admin users can only see contracts related to their cinema
     query = select(RentalContract)
 
-    if cinema_id:
+    if current_user.role.name == "admin":
+        query = query.filter(RentalContract.cinema_id == current_user.cinema_id)
+    elif cinema_id:
+        # Super admin can filter by any cinema ID
         query = query.filter(RentalContract.cinema_id == cinema_id)
 
     if distributor_id:
@@ -49,6 +56,31 @@ async def get_contracts(
     contracts = result.scalars().all()
 
     return contracts
+
+
+@router.get("/cinemas", response_model=List[CinemaResponse])
+async def get_available_cinemas(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Get available cinemas based on user role - admin gets only their cinema, super_admin gets all."""
+    if current_user.role.name == "admin":
+        # Admin can only see their assigned cinema
+        result = await db.execute(select(Cinema).filter(Cinema.id == current_user.cinema_id))
+        cinema = result.scalar_one_or_none()
+        if cinema:
+            return [cinema]
+        else:
+            return []
+    elif current_user.role.name == "super_admin":
+        # Super admin can see all cinemas
+        result = await db.execute(select(Cinema))
+        return result.scalars().all()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
 
 
 @router.get("/{contract_id}", response_model=RentalContractResponse)
@@ -76,6 +108,19 @@ async def create_contract(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new rental contract with validation."""
+    # Verify user permissions - admin can only create contracts for their cinema
+    if current_user.role.name == "admin":
+        if current_user.cinema_id != contract_data.cinema_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin can only create contracts for their assigned cinema"
+            )
+    elif current_user.role.name not in ["super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin and super admin users can create contracts"
+        )
+
     # Verify film exists
     result = await db.execute(select(Film).filter(Film.id == contract_data.film_id))
     film = result.scalar_one_or_none()
@@ -118,17 +163,49 @@ async def create_contract(
             detail=f"Contract number {contract_data.contract_number} already exists"
         )
 
-    # Validate dates
+    # Check for overlapping contracts for the same distributor and film at the same cinema
+    overlapping_contract_result = await db.execute(
+        select(RentalContract).filter(
+            and_(
+                RentalContract.distributor_id == contract_data.distributor_id,
+                RentalContract.film_id == contract_data.film_id,
+                RentalContract.cinema_id == contract_data.cinema_id,
+                RentalContract.status.in_([ContractStatus.ACTIVE, ContractStatus.PENDING]),
+                RentalContract.rental_start_date <= contract_data.rental_end_date,
+                RentalContract.rental_end_date >= contract_data.rental_start_date
+            )
+        )
+    )
+    overlapping_contract = overlapping_contract_result.scalar_one_or_none()
+    if overlapping_contract:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="There is already an active contract for this distributor and film at this cinema during the requested period"
+        )
+
+    # Validate dates (these validations are already in the schema, but kept for extra safety)
     if contract_data.rental_end_date <= contract_data.rental_start_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Rental end date must be after start date"
         )
 
+    if contract_data.contract_date > date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Contract date cannot be in the future"
+        )
+
     if contract_data.contract_date > contract_data.rental_start_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Contract date cannot be after rental start date"
+        )
+
+    if contract_data.rental_start_date < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rental start date cannot be before today"
         )
 
     new_contract = RentalContract(
@@ -140,7 +217,7 @@ async def create_contract(
         rental_start_date=contract_data.rental_start_date,
         rental_end_date=contract_data.rental_end_date,
         distributor_percentage=contract_data.distributor_percentage,
-        status=contract_data.status
+        status=ContractStatus.ACTIVE  # Always set to ACTIVE by default
     )
 
     db.add(new_contract)

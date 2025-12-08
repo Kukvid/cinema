@@ -22,8 +22,11 @@ import {
     Select,
     MenuItem,
     Grid,
-    DatePicker,
 } from "@mui/material";
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { ru } from 'date-fns/locale';
 import {
     Add as AddIcon,
     Edit as EditIcon,
@@ -31,50 +34,58 @@ import {
     Save as SaveIcon,
     Cancel as CancelIcon,
 } from "@mui/icons-material";
+import { useAuth } from "../../context/AuthContext";
 import { contractsAPI } from "../../api/contracts";
 import { distributorsAPI } from "../../api/distributors";
 import { filmsAPI } from "../../api/films";
 import Loading from "../../components/Loading";
 
 const ContractManagement = () => {
+    const { user } = useAuth();
     const [contracts, setContracts] = useState([]);
     const [distributors, setDistributors] = useState([]);
     const [films, setFilms] = useState([]);
+    const [cinemas, setCinemas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingContract, setEditingContract] = useState(null);
+    const [selectedCinema, setSelectedCinema] = useState(user.role === 'admin' ? user.cinema_id : '');
     const [formData, setFormData] = useState({
         film_id: "",
         distributor_id: "",
+        cinema_id: user.role === 'admin' ? user.cinema_id : "", // Auto populate for admin
         contract_number: "",
-        contract_date: "",
+        contract_date: new Date().toISOString().split("T")[0], // Today's date
         rental_start_date: "",
         rental_end_date: "",
-        terms: "",
-        status: "active",
         distributor_percentage: 0,
-        min_guarantee_amount: 0,
     });
-    const [contractPayments, setContractPayments] = useState({});
-    const [loadingPayments, setLoadingPayments] = useState({});
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [selectedCinema]);
 
     const loadData = async () => {
         try {
             setLoading(true);
-            const [contractsData, distributorsData, filmsData] =
-                await Promise.all([
-                    contractsAPI.getContracts(),
-                    distributorsAPI.getDistributors(),
-                    filmsAPI.getFilms(),
-                ]);
+            const [distributorsData, filmsData, cinemasData] = await Promise.all([
+                distributorsAPI.getDistributors(),
+                filmsAPI.getFilms(),
+                contractsAPI.getAvailableCinemas(), // Use the new endpoint that respects user permissions
+            ]);
+
+            // Load contracts with cinema filter
+            const contractsParams = {};
+            if (selectedCinema) {
+                contractsParams.cinema_id = selectedCinema;
+            }
+            const contractsData = await contractsAPI.getContracts(contractsParams);
+
             setContracts(contractsData);
             setDistributors(distributorsData.items || distributorsData);
             setFilms(filmsData.items || filmsData);
+            setCinemas(cinemasData);
         } catch (err) {
             setError("Не удалось загрузить данные");
         } finally {
@@ -84,10 +95,12 @@ const ContractManagement = () => {
 
     const handleOpenDialog = (contract = null) => {
         if (contract) {
+            // Editing existing contract
             setEditingContract(contract);
             setFormData({
                 film_id: contract.film_id || "",
                 distributor_id: contract.distributor_id || "",
+                cinema_id: contract.cinema_id || "",
                 contract_number: contract.contract_number || "",
                 contract_date: contract.contract_date
                     ? new Date(contract.contract_date)
@@ -104,24 +117,20 @@ const ContractManagement = () => {
                           .toISOString()
                           .split("T")[0]
                     : "",
-                terms: contract.terms || "",
-                status: contract.status || "active",
                 distributor_percentage: contract.distributor_percentage || 0,
-                min_guarantee_amount: contract.min_guarantee_amount || 0,
             });
         } else {
+            // Creating new contract
             setEditingContract(null);
             setFormData({
                 film_id: "",
                 distributor_id: "",
+                cinema_id: user.role === 'admin' ? user.cinema_id : "", // Auto populate for admin
                 contract_number: "",
-                contract_date: new Date().toISOString().split("T")[0],
+                contract_date: new Date().toISOString().split("T")[0], // Today's date
                 rental_start_date: "",
                 rental_end_date: "",
-                terms: "",
-                status: "active",
                 distributor_percentage: 0,
-                min_guarantee_amount: 0,
             });
         }
         setDialogOpen(true);
@@ -133,39 +142,61 @@ const ContractManagement = () => {
         setFormData({
             film_id: "",
             distributor_id: "",
+            cinema_id: user.role === 'admin' ? user.cinema_id : "", // Auto reset for admin
             contract_number: "",
             contract_date: new Date().toISOString().split("T")[0],
             rental_start_date: "",
             rental_end_date: "",
-            terms: "",
-            status: "active",
             distributor_percentage: 0,
-            min_guarantee_amount: 0,
         });
     };
 
     const handleSubmit = async () => {
         try {
+            // Prepare the data to submit
             const submitData = {
                 ...formData,
-                distributor_percentage: parseFloat(
-                    formData.distributor_percentage
-                ),
-                min_guarantee_amount: parseFloat(formData.min_guarantee_amount),
+                distributor_percentage: parseFloat(formData.distributor_percentage),
+                // Status is not included as it's automatically set to ACTIVE on creation
             };
 
+            // Convert date strings to date objects for validation
+            const contractDate = new Date(formData.contract_date);
+            const startDate = new Date(formData.rental_start_date);
+            const endDate = new Date(formData.rental_end_date);
+
+            // Validation checks
+            if (contractDate > new Date()) {
+                throw new Error('Дата подписания не может быть в будущем');
+            }
+
+            if (startDate < new Date()) {
+                throw new Error('Дата начала аренды не может быть раньше сегодняшней даты');
+            }
+
+            if (endDate <= startDate) {
+                throw new Error('Дата окончания аренды должна быть позже даты начала');
+            }
+
+            if (contractDate > startDate) {
+                throw new Error('Дата подписания не может быть позже даты начала аренды');
+            }
+
             if (editingContract) {
-                await contractsAPI.updateContract(
-                    editingContract.id,
-                    submitData
-                );
+                // Update existing contract (only allow updating specific fields)
+                const updateData = {
+                    rental_end_date: endDate,
+                    // Don't allow status to be changed through this form
+                };
+                await contractsAPI.updateContract(editingContract.id, updateData);
             } else {
+                // Create new contract with default ACTIVE status
                 await contractsAPI.createContract(submitData);
             }
             await loadData();
             handleCloseDialog();
         } catch (err) {
-            setError("Не удалось сохранить договор");
+            setError("Не удалось сохранить договор: " + (err.message || err.response?.data?.detail || "Неизвестная ошибка"));
         }
     };
 
@@ -188,44 +219,30 @@ const ContractManagement = () => {
         }));
     };
 
-    const loadContractPayments = async (contractId) => {
-        try {
-            setLoadingPayments(prev => ({ ...prev, [contractId]: true }));
-            const payments = await contractsAPI.getContractPayments(contractId);
-            setContractPayments(prev => ({
-                ...prev,
-                [contractId]: payments
-            }));
-        } catch (err) {
-            console.error(`Failed to load payments for contract ${contractId}:`, err);
-        } finally {
-            setLoadingPayments(prev => ({ ...prev, [contractId]: false }));
-        }
+    // Format date for display
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+        });
     };
 
-    const handleMarkPaymentAsPaid = async (contractId, paymentId) => {
-        try {
-            await contractsAPI.markPaymentAsPaid(contractId, paymentId);
-            // Reload contract payments to update the status
-            await loadContractPayments(contractId);
-        } catch (err) {
-            setError('Не удалось отметить платёж как оплаченный: ' + (err.response?.data?.detail || err.message));
-        }
+    // Get film by ID for display
+    const getFilmById = (filmId) => {
+        return films.find(film => film.id === filmId) || { title: 'Неизвестный фильм' };
     };
 
-    const handleViewPayments = async (contract) => {
-        try {
-            setLoadingPayments(prev => ({ ...prev, [contract.id]: true }));
-            const payments = await contractsAPI.getContractPayments(contract.id);
-            setContractPayments(prev => ({
-                ...prev,
-                [contract.id]: payments
-            }));
-        } catch (err) {
-            setError('Не удалось загрузить платежи для договора: ' + (err.response?.data?.detail || err.message));
-        } finally {
-            setLoadingPayments(prev => ({ ...prev, [contract.id]: false }));
-        }
+    // Get distributor by ID for display
+    const getDistributorById = (distributorId) => {
+        return distributors.find(distributor => distributor.id === distributorId) || { name: 'Неизвестный дистрибьютор' };
+    };
+
+    // Get cinema by ID for display
+    const getCinemaById = (cinemaId) => {
+        return cinemas.find(cinema => cinema.id === cinemaId) || { name: 'Неизвестный кинотеатр' };
     };
 
     if (loading) {
@@ -242,7 +259,7 @@ const ContractManagement = () => {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    mb: 4,
+                    mb: 2,
                 }}
             >
                 <Typography
@@ -263,10 +280,10 @@ const ContractManagement = () => {
                     onClick={() => handleOpenDialog()}
                     sx={{
                         background:
-                            "linear-gradient(135deg, #e50914 0%, #b00710 100%)",
+                            "linear-gradient(135deg, #e50914 0%, #ff6b6b 100%)",
                         "&:hover": {
                             background:
-                                "linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)",
+                                "linear-gradient(135deg, #ff6b6b 0%, #e50914 100%)",
                         },
                     }}
                 >
@@ -274,361 +291,389 @@ const ContractManagement = () => {
                 </Button>
             </Box>
 
+            {/* Cinema Filter for Super Admin */}
+            {user.role === 'super_admin' && (
+                <Paper sx={{ p: 2, mb: 3, background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)' }}>
+                    <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={12} md={6}>
+                            <FormControl fullWidth variant="outlined">
+                                <InputLabel>Фильтр по кинотеатру</InputLabel>
+                                <Select
+                                    value={selectedCinema}
+                                    onChange={(e) => setSelectedCinema(e.target.value)}
+                                    label="Фильтр по кинотеатру"
+                                >
+                                    <MenuItem value="">Все кинотеатры</MenuItem>
+                                    {cinemas.map((cinema) => (
+                                        <MenuItem key={cinema.id} value={cinema.id}>
+                                            {cinema.name} - {cinema.city}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                            <Typography variant="body2" color="text.secondary">
+                                {selectedCinema
+                                  ? `Показаны контракты для кинотеатра: ${cinemas.find(c => c.id === parseInt(selectedCinema))?.name || ''}`
+                                  : 'Показаны контракты по всем кинотеатрам'}
+                            </Typography>
+                        </Grid>
+                    </Grid>
+                </Paper>
+            )}
+
+            {/* For admin user, show their cinema */}
+            {user.role === 'admin' && (
+                <Paper sx={{ p: 2, mb: 3, background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)' }}>
+                    <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={12}>
+                            <Typography variant="body1">
+                                Контракты для кинотеатра: {cinemas.find(c => c.id === user.cinema_id)?.name || ''} - {cinemas.find(c => c.id === user.cinema_id)?.city || ''}
+                            </Typography>
+                        </Grid>
+                    </Grid>
+                </Paper>
+            )}
+
             {error && (
                 <Alert
                     severity="error"
-                    sx={{ mb: 3 }}
+                    sx={{ mb: 2 }}
+                    onClose={() => setError(null)}
                 >
                     {error}
                 </Alert>
             )}
 
-            <TableContainer component={Paper}>
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell>ID</TableCell>
-                            <TableCell>Номер договора</TableCell>
-                            <TableCell>Фильм</TableCell>
-                            <TableCell>Дистрибьютор</TableCell>
-                            <TableCell>Дата договора</TableCell>
-                            <TableCell>Срок действия</TableCell>
-                            <TableCell>Комиссия (%)</TableCell>
-                            <TableCell>Статус</TableCell>
-                            <TableCell>Платежи</TableCell>
-                            <TableCell>Действия</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {contracts.map((contract) => (
-                            <TableRow key={contract.id}>
-                                <TableCell>{contract.id}</TableCell>
-                                <TableCell>
-                                    {contract.contract_number}
-                                </TableCell>
-                                <TableCell>
-                                    {films.find(
-                                        (f) => f.id === contract.film_id
-                                    )?.title || "N/A"}
-                                </TableCell>
-                                <TableCell>
-                                    {distributors.find(
-                                        (d) => d.id === contract.distributor_id
-                                    )?.name || "N/A"}
-                                </TableCell>
-                                <TableCell>
-                                    {new Date(
-                                        contract.contract_date
-                                    ).toLocaleDateString("ru-RU")}
-                                </TableCell>
-                                <TableCell>
-                                    {new Date(
-                                        contract.rental_start_date
-                                    ).toLocaleDateString("ru-RU")}{" "}
-                                    -{" "}
-                                    {new Date(
-                                        contract.rental_end_date
-                                    ).toLocaleDateString("ru-RU")}
-                                </TableCell>
-                                <TableCell>
-                                    {contract.distributor_percentage}%
-                                </TableCell>
-                                <TableCell>{contract.status}</TableCell>
-                                <TableCell>
-                                    <Button
-                                        variant="outlined"
-                                        size="small"
-                                        onClick={() => handleViewPayments(contract)}
-                                        disabled={loadingPayments[contract.id]}
-                                        sx={{ mr: 1 }}
-                                    >
-                                        {loadingPayments[contract.id] ? 'Загрузка...' : 'Показать платежи'}
-                                    </Button>
-
-                                    {/* Show payment information if loaded */}
-                                    {contractPayments[contract.id] && (
-                                        <Box sx={{ mt: 1 }}>
-                                            {contractPayments[contract.id].length > 0 ? (
-                                                contractPayments[contract.id].slice(0, 2).map((payment, idx) => (
-                                                    <Box key={payment.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                                                        <Typography variant="caption">
-                                                            {payment.amount} ₽ ({payment.status})
-                                                        </Typography>
-                                                        {payment.status === 'PENDING' && (
-                                                            <Button
-                                                                size="small"
-                                                                variant="contained"
-                                                                onClick={() => handleMarkPaymentAsPaid(contract.id, payment.id)}
-                                                                sx={{ minWidth: 'auto', padding: '2px 6px' }}
-                                                            >
-                                                                Оплатить
-                                                            </Button>
-                                                        )}
-                                                    </Box>
-                                                ))
-                                            ) : (
-                                                <Typography variant="caption" color="text.secondary">
-                                                    Нет платежей
-                                                </Typography>
-                                            )}
-                                        </Box>
-                                    )}
-                                </TableCell>
-                                <TableCell>
-                                    <Button
-                                        startIcon={<EditIcon />}
-                                        onClick={() =>
-                                            handleOpenDialog(contract)
-                                        }
-                                        color="primary"
-                                        size="small"
-                                        sx={{ mr: 1 }}
-                                    >
-                                        Редактировать
-                                    </Button>
-                                    <Button
-                                        startIcon={<DeleteIcon />}
-                                        onClick={() =>
-                                            handleDelete(contract.id)
-                                        }
-                                        color="error"
-                                        size="small"
-                                    >
-                                        Удалить
-                                    </Button>
-                                </TableCell>
+            <Paper
+                elevation={3}
+                sx={{
+                    background: "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+                    border: "1px solid rgba(229, 9, 20, 0.3)",
+                    overflow: "hidden",
+                }}
+            >
+                <TableContainer>
+                    <Table>
+                        <TableHead>
+                            <TableRow
+                                sx={{
+                                    "& th": {
+                                        color: "#e50914",
+                                        fontWeight: 700,
+                                        fontSize: "1rem",
+                                        borderBottom: "2px solid #e50914",
+                                    },
+                                }}
+                            >
+                                <TableCell sx={{ minWidth: 120 }}>№ договора</TableCell>
+                                <TableCell sx={{ minWidth: 150 }}>Фильм</TableCell>
+                                <TableCell sx={{ minWidth: 150 }}>Дистрибьютор</TableCell>
+                                <TableCell sx={{ minWidth: 150 }}>Кинотеатр</TableCell>
+                                <TableCell sx={{ minWidth: 120 }}>Дата подписания</TableCell>
+                                <TableCell sx={{ minWidth: 120 }}>Дата начала</TableCell>
+                                <TableCell sx={{ minWidth: 120 }}>Дата окончания</TableCell>
+                                <TableCell sx={{ minWidth: 100 }}>Процент</TableCell>
+                                <TableCell sx={{ minWidth: 100 }}>Статус</TableCell>
+                                <TableCell sx={{ minWidth: 130, textAlign: 'center' }}>Действия</TableCell>
                             </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </TableContainer>
+                        </TableHead>
+                        <TableBody>
+                            {contracts.map((contract) => (
+                                <TableRow
+                                    key={contract.id}
+                                    sx={{
+                                        "&:nth-of-type(even)": {
+                                            backgroundColor: "rgba(255, 255, 255, 0.03)",
+                                        },
+                                        "&:hover": {
+                                            backgroundColor: "rgba(229, 9, 20, 0.1)",
+                                        },
+                                    }}
+                                >
+                                    <TableCell
+                                        sx={{
+                                            fontWeight: "bold",
+                                            color: "#ffd700",
+                                        }}
+                                    >
+                                        {contract.contract_number}
+                                    </TableCell>
+                                    <TableCell>
+                                        {getFilmById(contract.film_id).title}
+                                    </TableCell>
+                                    <TableCell>
+                                        {getDistributorById(
+                                            contract.distributor_id
+                                        ).name}
+                                    </TableCell>
+                                    <TableCell>
+                                        {getCinemaById(contract.cinema_id).name}
+                                    </TableCell>
+                                    <TableCell>
+                                        {formatDate(contract.contract_date)}
+                                    </TableCell>
+                                    <TableCell>
+                                        {formatDate(contract.rental_start_date)}
+                                    </TableCell>
+                                    <TableCell>
+                                        {formatDate(contract.rental_end_date)}
+                                    </TableCell>
+                                    <TableCell>
+                                        {contract.distributor_percentage}%
+                                    </TableCell>
+                                    <TableCell>
+                                        <Box
+                                            component="span"
+                                            sx={{
+                                                px: 1.5,
+                                                py: 0.5,
+                                                borderRadius: 2,
+                                                fontSize: "0.8rem",
+                                                fontWeight: "bold",
+                                                backgroundColor:
+                                                    contract.status ===
+                                                    "ACTIVE"
+                                                        ? "rgba(76, 175, 80, 0.2)"
+                                                        : contract.status ===
+                                                          "EXPIRED"
+                                                        ? "rgba(244, 67, 54, 0.2)"
+                                                        : "rgba(255, 193, 7, 0.2)",
+                                                color:
+                                                    contract.status ===
+                                                    "ACTIVE"
+                                                        ? "#4caf50"
+                                                        : contract.status ===
+                                                          "EXPIRED"
+                                                        ? "#f44336"
+                                                        : "#ffc107",
+                                            }}
+                                        >
+                                            {contract.status === "ACTIVE"
+                                                ? "Активен"
+                                                : contract.status === "EXPIRED"
+                                                ? "Просрочен"
+                                                : contract.status}
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Box sx={{ display: "flex", gap: 1, justifyContent: 'center' }}>
+                                            <Button
+                                                variant="outlined"
+                                                size="small"
+                                                startIcon={<EditIcon />}
+                                                onClick={() =>
+                                                    handleOpenDialog(contract)
+                                                }
+                                                sx={{
+                                                    borderColor: "#ffd700",
+                                                    color: "#ffd700",
+                                                    "&:hover": {
+                                                        borderColor: "#ffed4e",
+                                                        color: "#ffed4e",
+                                                    },
+                                                    minWidth: '32px',
+                                                    padding: '6px'
+                                                }}
+                                            >
+                                                <EditIcon sx={{ fontSize: '1rem' }} />
+                                            </Button>
+                                            <Button
+                                                variant="outlined"
+                                                size="small"
+                                                startIcon={<DeleteIcon />}
+                                                onClick={() =>
+                                                    handleDelete(contract.id)
+                                                }
+                                                sx={{
+                                                    borderColor: "#f44336",
+                                                    color: "#f44336",
+                                                    "&:hover": {
+                                                        borderColor: "#d32f2f",
+                                                        color: "#d32f2f",
+                                                    },
+                                                    minWidth: '32px',
+                                                    padding: '6px'
+                                                }}
+                                            >
+                                                <DeleteIcon sx={{ fontSize: '1rem' }} />
+                                            </Button>
+                                        </Box>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </Paper>
 
-            {/* Modal for creating/editing contract */}
+            {/* Dialog for adding/editing contracts */}
             <Dialog
                 open={dialogOpen}
                 onClose={handleCloseDialog}
                 maxWidth="md"
                 fullWidth
             >
-                <DialogTitle>
-                    {editingContract
-                        ? "Редактировать договор"
-                        : "Добавить договор"}
+                <DialogTitle
+                    sx={{
+                        background:
+                            "linear-gradient(135deg, #e50914 0%, #ff6b6b 100%)",
+                        color: "white",
+                    }}
+                >
+                    {editingContract ? "Редактировать договор" : "Создать новый договор"}
                 </DialogTitle>
-                <DialogContent>
-                    <Grid
-                        container
-                        spacing={2}
-                        sx={{ mt: 1 }}
-                    >
-                        <Grid
-                            item
-                            xs={12}
-                            sm={6}
-                        >
-                            <FormControl
+                <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ru}>
+                <DialogContent sx={{ pt: 2 }}>
+                    <Grid container spacing={2} sx={{ mt: 1 }}>
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                label="Номер договора"
+                                name="contract_number"
+                                value={formData.contract_number}
+                                onChange={handleInputChange}
                                 fullWidth
                                 required
-                            >
+                                variant="outlined"
+                            />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                            <FormControl fullWidth variant="outlined" required>
+                                <InputLabel>Кинотеатр</InputLabel>
+                                <Select
+                                    name="cinema_id"
+                                    value={formData.cinema_id}
+                                    onChange={handleInputChange}
+                                    label="Кинотеатр"
+                                    disabled={user.role === 'admin'} // Admin cannot change cinema
+                                >
+                                    {cinemas.map((cinema) => (
+                                        <MenuItem key={cinema.id} value={cinema.id}>
+                                            {cinema.name} - {cinema.city}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                            <FormControl fullWidth variant="outlined" required>
                                 <InputLabel>Фильм</InputLabel>
                                 <Select
                                     name="film_id"
                                     value={formData.film_id}
                                     onChange={handleInputChange}
+                                    label="Фильм"
                                 >
                                     {films.map((film) => (
-                                        <MenuItem
-                                            key={film.id}
-                                            value={film.id}
-                                        >
+                                        <MenuItem key={film.id} value={film.id}>
                                             {film.title}
                                         </MenuItem>
                                     ))}
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid
-                            item
-                            xs={12}
-                            sm={6}
-                        >
-                            <FormControl
-                                fullWidth
-                                required
-                            >
+                        <Grid item xs={12} md={6}>
+                            <FormControl fullWidth variant="outlined" required>
                                 <InputLabel>Дистрибьютор</InputLabel>
                                 <Select
                                     name="distributor_id"
                                     value={formData.distributor_id}
                                     onChange={handleInputChange}
+                                    label="Дистрибьютор"
                                 >
                                     {distributors.map((distributor) => (
-                                        <MenuItem
-                                            key={distributor.id}
-                                            value={distributor.id}
-                                        >
+                                        <MenuItem key={distributor.id} value={distributor.id}>
                                             {distributor.name}
                                         </MenuItem>
                                     ))}
                                 </Select>
                             </FormControl>
                         </Grid>
-                        <Grid
-                            item
-                            xs={12}
-                            sm={6}
-                        >
-                            <TextField
-                                fullWidth
-                                label="Номер договора"
-                                name="contract_number"
-                                value={formData.contract_number}
-                                onChange={handleInputChange}
-                                required
-                            />
-                        </Grid>
-                        <Grid
-                            item
-                            xs={12}
-                            sm={6}
-                        >
-                            <TextField
-                                fullWidth
-                                label="Дата договора"
-                                type="date"
-                                name="contract_date"
-                                value={formData.contract_date}
-                                onChange={handleInputChange}
-                                InputLabelProps={{
-                                    shrink: true,
+                        <Grid item xs={12} md={4}>
+                            <DatePicker
+                                label="Дата подписания"
+                                value={formData.contract_date ? new Date(formData.contract_date) : null}
+                                onChange={(date) => {
+                                    if (date) {
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            contract_date: date.toISOString().split('T')[0]
+                                        }));
+                                    }
                                 }}
-                                required
+                                renderInput={(params) => <TextField {...params} fullWidth required />}
                             />
                         </Grid>
-                        <Grid
-                            item
-                            xs={12}
-                            sm={6}
-                        >
-                            <TextField
-                                fullWidth
-                                label="Дата начала"
-                                type="date"
-                                name="start_date"
-                                value={formData.start_date}
-                                onChange={handleInputChange}
-                                InputLabelProps={{
-                                    shrink: true,
+                        <Grid item xs={12} md={4}>
+                            <DatePicker
+                                label="Дата начала аренды"
+                                value={formData.rental_start_date ? new Date(formData.rental_start_date) : null}
+                                onChange={(date) => {
+                                    if (date) {
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            rental_start_date: date.toISOString().split('T')[0]
+                                        }));
+                                    }
                                 }}
-                                required
+                                renderInput={(params) => <TextField {...params} fullWidth required />}
                             />
                         </Grid>
-                        <Grid
-                            item
-                            xs={12}
-                            sm={6}
-                        >
-                            <TextField
-                                fullWidth
-                                label="Дата окончания"
-                                type="date"
-                                name="end_date"
-                                value={formData.end_date}
-                                onChange={handleInputChange}
-                                InputLabelProps={{
-                                    shrink: true,
+                        <Grid item xs={12} md={4}>
+                            <DatePicker
+                                label="Дата окончания аренды"
+                                value={formData.rental_end_date ? new Date(formData.rental_end_date) : null}
+                                onChange={(date) => {
+                                    if (date) {
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            rental_end_date: date.toISOString().split('T')[0]
+                                        }));
+                                    }
                                 }}
-                                required
+                                renderInput={(params) => <TextField {...params} fullWidth required />}
                             />
                         </Grid>
-                        <Grid
-                            item
-                            xs={12}
-                            sm={6}
-                        >
+                        <Grid item xs={12}>
                             <TextField
-                                fullWidth
-                                label="Комиссия (%)"
-                                type="number"
+                                label="Процент дистрибьютора (%)"
                                 name="distributor_percentage"
+                                type="number"
                                 value={formData.distributor_percentage}
                                 onChange={handleInputChange}
+                                fullWidth
+                                variant="outlined"
                                 required
+                                InputProps={{ inputProps: { min: 0, max: 100, step: 0.01 } }}
                             />
-                        </Grid>
-                        <Grid
-                            item
-                            xs={12}
-                            sm={6}
-                        >
-                            <TextField
-                                fullWidth
-                                label="Минимальная гарантия (руб)"
-                                type="number"
-                                name="min_guarantee_amount"
-                                value={formData.min_guarantee_amount}
-                                onChange={handleInputChange}
-                            />
-                        </Grid>
-                        <Grid
-                            item
-                            xs={12}
-                        >
-                            <TextField
-                                fullWidth
-                                label="Условия"
-                                name="terms"
-                                value={formData.terms}
-                                onChange={handleInputChange}
-                                multiline
-                                rows={4}
-                            />
-                        </Grid>
-                        <Grid
-                            item
-                            xs={12}
-                        >
-                            <FormControl fullWidth>
-                                <InputLabel>Статус</InputLabel>
-                                <Select
-                                    name="status"
-                                    value={formData.status}
-                                    onChange={handleInputChange}
-                                >
-                                    <MenuItem value="active">Активен</MenuItem>
-                                    <MenuItem value="expired">Истёк</MenuItem>
-                                    <MenuItem value="terminated">
-                                        Расторгнут
-                                    </MenuItem>
-                                    <MenuItem value="pending">
-                                        Ожидает подписания
-                                    </MenuItem>
-                                </Select>
-                            </FormControl>
                         </Grid>
                     </Grid>
                 </DialogContent>
-                <DialogActions>
+                </LocalizationProvider>
+                <DialogActions sx={{ p: 2 }}>
                     <Button
                         onClick={handleCloseDialog}
                         startIcon={<CancelIcon />}
+                        variant="outlined"
+                        color="secondary"
                     >
                         Отмена
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        variant="contained"
                         startIcon={<SaveIcon />}
+                        variant="contained"
                         sx={{
                             background:
-                                "linear-gradient(135deg, #46d369 0%, #2e7d32 100%)",
+                                "linear-gradient(135deg, #e50914 0%, #ff6b6b 100%)",
                             "&:hover": {
                                 background:
-                                    "linear-gradient(135deg, #5ce67c 0%, #388e3c 100%)",
+                                    "linear-gradient(135deg, #ff6b6b 0%, #e50914 100%)",
                             },
                         }}
                     >
-                        Сохранить
+                        {editingContract ? "Сохранить" : "Создать"}
                     </Button>
                 </DialogActions>
             </Dialog>

@@ -32,11 +32,13 @@ import {
 } from '@mui/icons-material';
 import { usersAPI } from '../../api/users';
 import { rolesAPI } from '../../api/roles';
+import { contractsAPI } from '../../api/contracts'; // Используем существующий API для получения кинотеатров
 import Loading from '../../components/Loading';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [cinemas, setCinemas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -47,7 +49,9 @@ const UserManagement = () => {
     email: '',
     phone: '',
     role_id: '',
-    status: 'active'
+    cinema_id: '', // Новое поле для cinema_id
+    status: 'active',
+    password: '',
   });
 
   useEffect(() => {
@@ -57,12 +61,14 @@ const UserManagement = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [usersData, rolesData] = await Promise.all([
+      const [usersData, rolesData, cinemasData] = await Promise.all([
         usersAPI.getUsers(),
-        rolesAPI.getRoles()
+        rolesAPI.getRoles(),
+        contractsAPI.getAvailableCinemas(), // Загружаем кинотеатры
       ]);
       setUsers(usersData);
       setRoles(rolesData);
+      setCinemas(cinemasData); // Устанавливаем данные о кинотеатрах
     } catch (err) {
       setError('Не удалось загрузить данные пользователей');
     } finally {
@@ -79,7 +85,9 @@ const UserManagement = () => {
         email: user.email || '',
         phone: user.phone || '',
         role_id: user.role_id || '',
-        status: user.status || 'active'
+        cinema_id: user.cinema_id || '', // Добавляем cinema_id
+        status: user.status || 'active',
+        password: '',
       });
     } else {
       setEditingUser(null);
@@ -89,7 +97,9 @@ const UserManagement = () => {
         email: '',
         phone: '',
         role_id: '',
-        status: 'active'
+        cinema_id: '', // Добавляем cinema_id
+        status: 'active',
+        password: '',
       });
     }
     setDialogOpen(true);
@@ -104,6 +114,7 @@ const UserManagement = () => {
       email: '',
       phone: '',
       role_id: '',
+      cinema_id: '', // Добавляем cinema_id
       status: 'active'
     });
   };
@@ -190,6 +201,7 @@ const UserManagement = () => {
               <TableCell>Email</TableCell>
               <TableCell>Телефон</TableCell>
               <TableCell>Роль</TableCell>
+              <TableCell>Кинотеатр</TableCell>
               <TableCell>Статус</TableCell>
               <TableCell>Дата регистрации</TableCell>
               <TableCell>Действия</TableCell>
@@ -204,6 +216,7 @@ const UserManagement = () => {
                 <TableCell>{user.email}</TableCell>
                 <TableCell>{user.phone}</TableCell>
                 <TableCell>{roles.find(r => r.id === user.role_id)?.name || 'N/A'}</TableCell>
+                <TableCell>{cinemas.find(c => c.id === user.cinema_id)?.name || 'N/A'}</TableCell>
                 <TableCell>{user.status}</TableCell>
                 <TableCell>{new Date(user.registration_date).toLocaleDateString()}</TableCell>
                 <TableCell>
@@ -275,6 +288,21 @@ const UserManagement = () => {
                 onChange={handleInputChange}
               />
             </Grid>
+            {/* Добавляем поле пароля ТОЛЬКО для создания нового пользователя */}
+            {!editingUser && ( // <-- Условный рендеринг
+              <Grid item xs={12}>
+                 <TextField
+                    fullWidth
+                    label="Пароль"
+                    name="password"
+                    type="password" // <-- Важно для безопасности
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    required={!editingUser} // <-- Поле обязательно только при создании
+                  />
+              </Grid>
+            )}
+
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
                 <InputLabel>Роль</InputLabel>
@@ -286,6 +314,23 @@ const UserManagement = () => {
                   {roles.map((role) => (
                     <MenuItem key={role.id} value={role.id}>
                       {role.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Кинотеатр</InputLabel>
+                <Select
+                  name="cinema_id"
+                  value={formData.cinema_id}
+                  onChange={handleInputChange}
+                >
+                  <MenuItem value="">Нет кинотеатра</MenuItem>
+                  {cinemas.map((cinema) => (
+                    <MenuItem key={cinema.id} value={cinema.id}>
+                      {cinema.name} - {cinema.city}
                     </MenuItem>
                   ))}
                 </Select>

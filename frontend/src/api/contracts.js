@@ -37,6 +37,12 @@ export const contractsAPI = {
     return response.data;
   },
 
+  // Get available cinemas based on user role
+  getAvailableCinemas: async () => {
+    const response = await axios.get('/contracts/cinemas');
+    return response.data;
+  },
+
   // Mark a payment as paid
   markPaymentAsPaid: async (contractId, paymentId) => {
     const response = await axios.post(`/contracts/${contractId}/payments/${paymentId}/pay`);

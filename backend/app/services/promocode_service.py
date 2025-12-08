@@ -15,7 +15,6 @@ from sqlalchemy import select
 
 from app.models.promocode import Promocode
 from app.models.enums import PromocodeStatus, DiscountType
-import pytz
 
 class PromocodeValidationResult:
     """Результат валидации промокода."""
@@ -57,7 +56,7 @@ async def validate_promocode(
 
     # Использовать текущую дату, если не указана
     if today is None:
-        today =datetime.now(pytz.timezone('Europe/Moscow')).date()
+        today = datetime.now(pytz.timezone('Europe/Moscow')).date()
 
     # Найти промокод по коду
     result = await db.execute(

@@ -7,7 +7,25 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from datetime import datetime
+from typing import Optional
+from fastapi import FastAPI
+from sqladmin import Admin, ModelView
+from sqladmin.authentication import AuthenticationBackend
+from starlette.requests import Request
+from starlette.responses import RedirectResponse
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+# Импортируем select и selectinload
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
+from app.config import get_settings
+from app.models.user import User
+# ... другие импорты моделей ...
+
+# Импортируем engine из вашего файла базы данных
+from app.database import engine
 from app.config import get_settings
 from app.models.user import User
 from app.models.film import Film
@@ -20,7 +38,7 @@ from app.models.role import Role
 from app.models.genre import Genre
 from app.models.distributor import Distributor
 from app.models.concession_item import ConcessionItem
-from app.models.concession_category import ConcessionCategory
+from app.models.food_category import FoodCategory
 from app.models.promocode import Promocode
 from app.models.bonus_account import BonusAccount
 from app.models.bonus_transaction import BonusTransaction
@@ -31,25 +49,33 @@ from app.models.concession_preorder import ConcessionPreorder
 from app.models.enums import UserStatus, PaymentStatus, OrderStatus, TicketStatus, PreorderStatus, ConcessionItemStatus
 
 
+from app.database import engine # <-- Добавлен импорт engine
+
+
 class AdminAuthBackend(AuthenticationBackend):
     async def login(self, request: Request) -> bool:
         form = await request.form()
         email, password = form.get("username"), form.get("password")
 
-        from app.database import get_db
-        from app.models.user import User
+        # from app.database import get_db # <-- Не нужно импортировать get_db
+        # from app.models.user import User # <-- Уже импортирован выше
         from app.utils.security import verify_password
-        
-        # Get database session
-        async with get_db() as db:
+
+        # Get database session - Создаем сессию напрямую через engine
+        async with AsyncSession(engine) as db:
             # Find user by email
-            from sqlalchemy import select
-            result = await db.execute(select(User).filter(User.email == email))
+            # ИСПРАВЛЕНО: Добавляем options(selectinload(...)) для предзагрузки роли
+            result = await db.execute(
+                select(User)
+                .filter(User.email == email)
+                .options(selectinload(User.role))  # <-- Предзагружаем связь User.role
+            )
             user = result.scalar_one_or_none()
 
             if user and verify_password(password, user.password_hash):
                 # Check if user is admin
-                if user.role and user.role.name == "admin" or user.role.name == "super_admin" or user.role.name == "staff":
+                # Теперь user.role должен быть загружен, и ошибка MissingGreenlet не возникнет
+                if user.role and user.role.name in ["admin", "super_admin", "staff"]:
                     # Store user in session
                     request.session.update({"user_id": user.id, "email": user.email, "role": user.role.name})
                     return True
@@ -64,20 +90,28 @@ class AdminAuthBackend(AuthenticationBackend):
         user_id = request.session.get("user_id")
         if not user_id:
             return False
-        
+
         # Verify user is still in database and is admin
-        from app.database import get_db
-        from app.models.user import User
-        
-        async with get_db() as db:
-            from sqlalchemy import select
-            result = await db.execute(select(User).filter(User.id == user_id))
+        # from app.database import get_db # <-- Не нужно импортировать get_db
+        # from app.models.user import User # <-- Уже импортирован выше
+
+        # Get database session - Создаем сессию напрямую через engine
+        async with AsyncSession(engine) as db:
+            # Find user by ID
+            # ИСПРАВЛЕНО: Добавляем options(selectinload(...)) для предзагрузки роли
+            result = await db.execute(
+                select(User)
+                .filter(User.id == user_id)
+                .options(selectinload(User.role))  # <-- Предзагружаем связь User.role
+            )
             user = result.scalar_one_or_none()
 
-            if user.role and user.role.name == "admin" or user.role.name == "super_admin" or user.role.name == "staff":
+            # Теперь user.role должен быть загружен, и ошибка MissingGreenlet не возникнет
+            if user and user.role and user.role.name in ["admin", "super_admin", "staff"]:
                 return True
-        
+
         return False
+
 
 
 # User Admin
@@ -114,9 +148,9 @@ class HallAdmin(ModelView, model=Hall):
 
 # Film Admin
 class FilmAdmin(ModelView, model=Film):
-    column_list = [Film.id, Film.title, Film.original_title, Film.duration_minutes, Film.release_date, Film.age_rating]
+    column_list = [Film.id, Film.title, Film.original_title, Film.duration_minutes, Film.release_year, Film.age_rating]
     column_searchable_list = [Film.title, Film.original_title, Film.description]
-    column_sortable_list = [Film.id, Film.title, Film.release_date, Film.duration_minutes]
+    column_sortable_list = [Film.id, Film.title, Film.release_year, Film.duration_minutes]
     can_view_details = True
     name = "Фильм"
     name_plural = "Фильмы"
@@ -183,10 +217,10 @@ class RoleAdmin(ModelView, model=Role):
 
 
 # Concession Category Admin
-class ConcessionCategoryAdmin(ModelView, model=ConcessionCategory):
-    column_list = [ConcessionCategory.id, ConcessionCategory.name, ConcessionCategory.description]
-    column_searchable_list = [ConcessionCategory.name]
-    column_sortable_list = [ConcessionCategory.id, ConcessionCategory.name]
+class FoodCategoryAdmin(ModelView, model=FoodCategory):
+    column_list = [FoodCategory.id, FoodCategory.name]
+    column_searchable_list = [FoodCategory.name]
+    column_sortable_list = [FoodCategory.id, FoodCategory.name]
     can_view_details = True
     name = "Категория товаров"
     name_plural = "Категории товаров"
@@ -216,7 +250,7 @@ class PromocodeAdmin(ModelView, model=Promocode):
 
 # Bonus Account Admin
 class BonusAccountAdmin(ModelView, model=BonusAccount):
-    column_list = [BonusAccount.id, BonusAccount.user, BonusAccount.balance, BonusAccount.last_updated]
+    column_list = [BonusAccount.id, BonusAccount.user, BonusAccount.balance, BonusAccount.last_accrual_date]
     column_searchable_list = []
     column_sortable_list = [BonusAccount.id, BonusAccount.balance]
     can_view_details = True
@@ -237,9 +271,9 @@ class BonusTransactionAdmin(ModelView, model=BonusTransaction):
 
 # Seat Admin
 class SeatAdmin(ModelView, model=Seat):
-    column_list = [Seat.id, Seat.hall, Seat.row_number, Seat.seat_number, Seat.seat_type]
+    column_list = [Seat.id, Seat.hall, Seat.row_number, Seat.seat_number]
     column_searchable_list = []
-    column_sortable_list = [Seat.id, Seat.row_number, Seat.seat_number]
+    column_sortable_list = [Seat.id, Seat.row_number, Seat.seat_number, Seat.hall]
     can_view_details = True
     name = "Место"
     name_plural = "Места"
@@ -293,7 +327,7 @@ def setup_admin(app: FastAPI, engine):
     admin.add_view(TicketAdmin)
     admin.add_view(OrderAdmin)
     admin.add_view(RoleAdmin)
-    admin.add_view(ConcessionCategoryAdmin)
+    admin.add_view(FoodCategoryAdmin)
     admin.add_view(ConcessionItemAdmin)
     admin.add_view(PromocodeAdmin)
     admin.add_view(BonusAccountAdmin)

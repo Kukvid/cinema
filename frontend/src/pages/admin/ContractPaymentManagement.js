@@ -59,7 +59,7 @@ const ContractPaymentManagement = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       let paymentsData;
       if (user.role === 'super_admin' && cinemaFilter) {
         // Super admin with cinema filter
@@ -74,7 +74,7 @@ const ContractPaymentManagement = () => {
         // Other roles shouldn't be here due to route protection
         paymentsData = [];
       }
-      
+
       setPendingPayments(paymentsData);
     } catch (err) {
       console.error('Error loading pending payments:', err);
@@ -160,8 +160,8 @@ const ContractPaymentManagement = () => {
             </Grid>
             <Grid item xs={12} md={6}>
               <Typography variant="body2" color="text.secondary">
-                {cinemaFilter 
-                  ? `Показаны платежи для кинотеатра: ${cinemas.find(c => c.id === parseInt(cinemaFilter))?.name || ''}` 
+                {cinemaFilter
+                  ? `Показаны платежи для кинотеатра: ${cinemas.find(c => c.id === parseInt(cinemaFilter))?.name || ''}`
                   : 'Показаны все платежи по всем кинотеатрам'}
               </Typography>
             </Grid>

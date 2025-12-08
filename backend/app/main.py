@@ -6,7 +6,8 @@ from app.config import settings
 from app.database import engine
 from app.models import Base
 from app.tasks import OrderCleanupService
-
+from app.utils import LoggingMiddleware
+from app.admin import setup_admin
 
 # Global task service instance
 task_service = None
@@ -26,11 +27,12 @@ async def lifespan(app: FastAPI):
 
     # Setup admin panel
     try:
-        from app.admin import setup_admin
-        setup_admin(app, engine)
-    except ImportError:
-        print("Admin panel not available (sqladmin not installed)")
 
+        setup_admin(app, engine)
+    except ImportError as e:
+        print(f"Admin panel failed to load: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
     yield
 
     # Shutdown
@@ -54,6 +56,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Logging middleware - should be added early in the middleware chain
+app.add_middleware(LoggingMiddleware)
 
 
 @app.get("/")

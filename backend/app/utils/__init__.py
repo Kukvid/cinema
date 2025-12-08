@@ -1,1 +1,3 @@
-# Utility functions will be placed here
+from .logging_middleware import LoggingMiddleware
+
+__all__ = ["LoggingMiddleware"]

@@ -4,6 +4,8 @@ from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 from app.models.enums import UserStatus, Gender
 
+from app.schemas.role import RoleResponse
+
 
 # Base schema with common fields
 class UserBase(BaseModel):
@@ -16,6 +18,7 @@ class UserBase(BaseModel):
     city: Optional[str] = None
     preferred_language: str = "ru"
     marketing_consent: bool = False
+    cinema_id: Optional[int] = None
 
 
 # Schema for user registration
@@ -23,6 +26,12 @@ class UserCreate(UserBase):
     password: str = Field(..., min_length=6, description="Password must be at least 6 characters")
     data_processing_consent: bool = Field(default=True, description="User must consent to data processing")
 
+
+class UserCreateInAdmin(UserBase):
+    password: str = Field(..., min_length=6, description="Password must be at least 6 characters")
+    data_processing_consent: bool = Field(default=True, description="User must consent to data processing")
+    role_id: Optional[int] = None
+    cinema_id: Optional[int] = None
 
 # Schema for user login
 class UserLogin(BaseModel):
@@ -39,6 +48,7 @@ class UserUpdate(BaseModel):
     city: Optional[str] = None
     preferred_language: Optional[str] = None
     marketing_consent: Optional[bool] = None
+    cinema_id: Optional[int] = None
 
 
 # Schema for user response (excludes password)
@@ -58,8 +68,6 @@ class UserResponse(BaseModel):
     employment_date: Optional[date] = None
     last_login: Optional[datetime] = None
     status: UserStatus
-    marketing_consent: bool
-    preferred_language: str
     role_id: Optional[int] = None
     cinema_id: Optional[int] = None
     bonus_balance: Optional[float] = None
