@@ -26,7 +26,7 @@ async def get_seats(
 ):
     """Get list of seats with optional filters."""
     # Only admin/users with appropriate permissions should access seat management
-    if not current_user.role or current_user.role.name not in ["admin", "manager"]:
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin and manager users can access seat management"
@@ -58,7 +58,7 @@ async def get_seat(
     db: AsyncSession = Depends(get_db)
 ):
     """Get seat by ID."""
-    if not current_user.role or current_user.role.name not in ["admin", "manager"]:
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin and manager users can access seat details"

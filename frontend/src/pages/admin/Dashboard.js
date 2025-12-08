@@ -198,6 +198,13 @@ const Dashboard = () => {
             restrictedForStaff: true,
         },
         {
+            title: "Управление платежами по контрактам",
+            icon: <MoneyIcon />,
+            path: "/admin/contract-payments",
+            description: "Оплата и управление платежами за контракты с дистрибьюторами",
+            restrictedForStaff: true,
+        },
+        {
             title: "Кинобар",
             icon: <FoodIcon />,
             path: "/admin/concessions",

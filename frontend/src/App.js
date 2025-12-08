@@ -32,6 +32,7 @@ import UserManagement from './pages/admin/UserManagement';
 import GenreManagement from './pages/admin/GenreManagement';
 import DistributorManagement from './pages/admin/DistributorManagement';
 import ContractManagement from './pages/admin/ContractManagement';
+import ContractPaymentManagement from './pages/admin/ContractPaymentManagement';
 import HallManagement from './pages/admin/HallManagement';
 import SeatManagement from './pages/admin/SeatManagement';
 import SessionManagement from './pages/admin/SessionManagement';
@@ -137,6 +138,14 @@ function App() {
                 element={
                   <PrivateRoute requireAdmin>
                     <ContractManagement />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin/contract-payments"
+                element={
+                  <PrivateRoute requireAdmin>
+                    <ContractPaymentManagement />
                   </PrivateRoute>
                 }
               />

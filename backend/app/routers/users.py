@@ -86,7 +86,7 @@ async def get_user(
     db: AsyncSession = Depends(get_db)
 ):
     """Get user by ID."""
-    if not current_user.role or current_user.role.name not in ["admin", "manager"]:
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin or manager users can access user details"
@@ -205,7 +205,7 @@ async def get_user_bonus_balance(
     db: AsyncSession = Depends(get_db)
 ):
     """Get user's bonus account balance."""
-    if not current_user.role or current_user.role.name not in ["admin", "manager"]:
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin or manager users can access bonus balances"

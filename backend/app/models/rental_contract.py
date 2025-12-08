@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Date, DECIMAL, Text, ForeignKey, Enum as SQLEnum, Index, CheckConstraint
 from sqlalchemy.orm import relationship
-from .enums import ContractStatus
+from .enums import ContractStatus, PaymentStatus
 from . import Base
 
 
@@ -17,19 +17,10 @@ class RentalContract(Base):
     rental_start_date = Column(Date, nullable=False)
     rental_end_date = Column(Date, nullable=False)
 
-    min_screening_period_days = Column(Integer)
-    min_sessions_per_day = Column(Integer)
-
-    distributor_percentage_week1 = Column(DECIMAL(5, 2), nullable=False)
-    distributor_percentage_week2 = Column(DECIMAL(5, 2), nullable=False)
-    distributor_percentage_week3 = Column(DECIMAL(5, 2), nullable=False)
-    distributor_percentage_after = Column(DECIMAL(5, 2), nullable=False)
-
-    guaranteed_minimum_amount = Column(DECIMAL(12, 2), default=0.00)
-    cinema_operational_costs = Column(DECIMAL(12, 2), default=0.00)
+    # New single percentage field to replace the weekly percentages
+    distributor_percentage = Column(DECIMAL(5, 2), nullable=True, default=0.00)
 
     status = Column(SQLEnum(ContractStatus), default=ContractStatus.ACTIVE, nullable=False)
-    early_termination_terms = Column(Text)
 
     # Relationships
     film = relationship("Film", back_populates="rental_contracts")
@@ -44,8 +35,5 @@ class RentalContract(Base):
         Index("idx_rental_contract_cinema", "cinema_id"),
         Index("idx_rental_contract_dates", "rental_start_date", "rental_end_date"),
         CheckConstraint("rental_end_date > rental_start_date", name="check_rental_dates_valid"),
-        CheckConstraint("distributor_percentage_week1 >= 0 AND distributor_percentage_week1 <= 100", name="check_percentage_week1"),
-        CheckConstraint("distributor_percentage_week2 >= 0 AND distributor_percentage_week2 <= 100", name="check_percentage_week2"),
-        CheckConstraint("distributor_percentage_week3 >= 0 AND distributor_percentage_week3 <= 100", name="check_percentage_week3"),
-        CheckConstraint("distributor_percentage_after >= 0 AND distributor_percentage_after <= 100", name="check_percentage_after"),
+        CheckConstraint("distributor_percentage >= 0 AND distributor_percentage <= 100", name="check_distributor_percentage_valid"),
     )

@@ -37,6 +37,7 @@ class ContractStatus(str, Enum):
     EXPIRED = "expired"
     TERMINATED = "terminated"
     PENDING = "pending"
+    PAID = "paid"
 
 
 class PaymentStatus(str, Enum):

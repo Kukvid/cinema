@@ -26,6 +26,7 @@ from app.models.bonus_account import BonusAccount
 from app.models.bonus_transaction import BonusTransaction
 from app.models.seat import Seat
 from app.models.payment import Payment
+from app.models.payment_history import PaymentHistory
 from app.models.concession_preorder import ConcessionPreorder
 from app.models.enums import UserStatus, PaymentStatus, OrderStatus, TicketStatus, PreorderStatus, ConcessionItemStatus
 
@@ -256,13 +257,24 @@ class PaymentAdmin(ModelView, model=Payment):
 
 # Concession Preorder Admin
 class ConcessionPreorderAdmin(ModelView, model=ConcessionPreorder):
-    column_list = [ConcessionPreorder.id, ConcessionPreorder.order, ConcessionPreorder.concession_item, 
+    column_list = [ConcessionPreorder.id, ConcessionPreorder.order, ConcessionPreorder.concession_item,
                    ConcessionPreorder.quantity, ConcessionPreorder.status]
     column_searchable_list = []
     column_sortable_list = [ConcessionPreorder.id, ConcessionPreorder.quantity]
     can_view_details = True
     name = "Предзаказ кинобара"
     name_plural = "Предзаказы кинобара"
+
+
+# Payment History Admin
+class PaymentHistoryAdmin(ModelView, model=PaymentHistory):
+    column_list = [PaymentHistory.id, PaymentHistory.rental_contract, PaymentHistory.calculated_amount,
+                   PaymentHistory.calculation_date, PaymentHistory.payment_status, PaymentHistory.payment_date]
+    column_searchable_list = []
+    column_sortable_list = [PaymentHistory.id, PaymentHistory.calculated_amount, PaymentHistory.calculation_date, PaymentHistory.payment_status]
+    can_view_details = True
+    name = "История платежей по контрактам"
+    name_plural = "История платежей по контрактам"
 
 
 def setup_admin(app: FastAPI, engine):
@@ -289,5 +301,6 @@ def setup_admin(app: FastAPI, engine):
     admin.add_view(SeatAdmin)
     admin.add_view(PaymentAdmin)
     admin.add_view(ConcessionPreorderAdmin)
+    admin.add_view(PaymentHistoryAdmin)
 
     return admin

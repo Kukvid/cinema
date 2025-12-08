@@ -14,6 +14,7 @@ from app.models.cinema import Cinema
 from app.models.seat import Seat
 from app.models.ticket import Ticket
 from app.models.user import User
+from app.models.rental_contract import RentalContract
 from app.models.enums import SessionStatus, TicketStatus
 from app.schemas.session import SessionCreate, SessionUpdate, SessionResponse, SessionWithSeats
 from app.schemas.seat import SeatWithStatus
@@ -247,6 +248,33 @@ async def create_session(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Hall with id {session_data.hall_id} not found"
+        )
+
+    # Check if the session date is in the past
+    current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+    if session_data.start_datetime < current_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create a session in the past"
+        )
+
+    # Check if the film has an active rental contract for this session's date
+    result = await db.execute(
+        select(RentalContract).filter(
+            and_(
+                RentalContract.film_id == session_data.film_id,
+                RentalContract.rental_start_date <= session_data.start_datetime.date(),
+                RentalContract.rental_end_date >= session_data.start_datetime.date(),
+                RentalContract.status.in_(["ACTIVE", "PENDING", "PAID"])  # Active, pending payment, or paid contracts
+            )
+        )
+    )
+    rental_contract = result.scalar_one_or_none()
+
+    if not rental_contract:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active rental contract found for the film on the specified date"
         )
 
     # Check for time conflicts in the same hall

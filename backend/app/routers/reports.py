@@ -28,10 +28,10 @@ async def get_reports(
 ):
     """Get list of reports with filters."""
     # Only admin users should be able to see reports
-    if not current_user.role or current_user.role.name not in ["admin", "manager"]:
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin and manager users can access reports"
+            detail="Only admin and super_admin users can access reports"
         )
 
     query = select(Report).options(selectinload(Report.user))
@@ -83,7 +83,7 @@ async def get_report(
     db: AsyncSession = Depends(get_db)
 ):
     """Get report by ID."""
-    if not current_user.role or current_user.role.name not in ["admin", "manager"]:
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin and manager users can access reports"
@@ -121,7 +121,7 @@ async def create_report(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new report request."""
-    if not current_user.role or current_user.role.name not in ["admin", "manager"]:
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin and manager users can create reports"

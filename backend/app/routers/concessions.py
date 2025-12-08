@@ -27,6 +27,7 @@ router = APIRouter()
 
 @router.get("", response_model=List[ConcessionItemResponse])
 async def get_concession_items(
+    current_user: Annotated[User, Depends(get_current_active_user)],
     cinema_id: int | None = Query(None, description="Filter by cinema ID"),
     status_filter: ConcessionItemStatus | None = Query(None, alias="status", description="Filter by status"),
     skip: int = Query(0, ge=0),
@@ -42,7 +43,10 @@ async def get_concession_items(
     if status_filter:
         query = query.filter(ConcessionItem.status == status_filter)
 
-    query = query.offset(skip).limit(limit)
+    if current_user.role.name in [UserRoles.staff, UserRoles.admin]:
+        query = query.filter(ConcessionItem.cinema_id == current_user.cinema_id)
+
+    query = query.order_by(ConcessionItem.name.asc()).offset(skip).limit(limit)
     result = await db.execute(query)
     items = result.scalars().all()
 

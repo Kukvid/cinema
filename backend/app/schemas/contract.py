@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import Optional, Union
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
@@ -12,15 +12,7 @@ class RentalContractBase(BaseModel):
     contract_date: date
     rental_start_date: date
     rental_end_date: date
-    min_screening_period_days: Optional[int] = Field(None, ge=0)
-    min_sessions_per_day: Optional[int] = Field(None, ge=0)
-    distributor_percentage_week1: Decimal = Field(..., ge=0, le=100, description="Percentage must be 0-100")
-    distributor_percentage_week2: Decimal = Field(..., ge=0, le=100, description="Percentage must be 0-100")
-    distributor_percentage_week3: Decimal = Field(..., ge=0, le=100, description="Percentage must be 0-100")
-    distributor_percentage_after: Decimal = Field(..., ge=0, le=100, description="Percentage must be 0-100")
-    guaranteed_minimum_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
-    cinema_operational_costs: Decimal = Field(default=Decimal("0.00"), ge=0)
-    early_termination_terms: Optional[str] = None
+    distributor_percentage: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0)
 
     @field_validator('rental_end_date')
     @classmethod
@@ -42,7 +34,6 @@ class RentalContractCreate(RentalContractBase):
 class RentalContractUpdate(BaseModel):
     rental_end_date: Optional[date] = None
     status: Optional[ContractStatus] = None
-    early_termination_terms: Optional[str] = None
 
 
 # Schema for rental contract response

@@ -1,8 +1,8 @@
-from typing import List, Annotated
-from datetime import date, timedelta
+from typing import List, Annotated, Optional
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
 from app.database import get_db
 from app.models.rental_contract import RentalContract
@@ -11,8 +11,9 @@ from app.models.film import Film
 from app.models.distributor import Distributor
 from app.models.cinema import Cinema
 from app.models.user import User
-from app.models.enums import ContractStatus
+from app.models.enums import ContractStatus, PaymentStatus
 from app.schemas.contract import RentalContractCreate, RentalContractUpdate, RentalContractResponse
+from app.schemas.payment_history import PaymentHistoryResponse
 from app.routers.auth import get_current_active_user
 
 router = APIRouter()
@@ -138,16 +139,8 @@ async def create_contract(
         contract_date=contract_data.contract_date,
         rental_start_date=contract_data.rental_start_date,
         rental_end_date=contract_data.rental_end_date,
-        min_screening_period_days=contract_data.min_screening_period_days,
-        min_sessions_per_day=contract_data.min_sessions_per_day,
-        distributor_percentage_week1=contract_data.distributor_percentage_week1,
-        distributor_percentage_week2=contract_data.distributor_percentage_week2,
-        distributor_percentage_week3=contract_data.distributor_percentage_week3,
-        distributor_percentage_after=contract_data.distributor_percentage_after,
-        guaranteed_minimum_amount=contract_data.guaranteed_minimum_amount,
-        cinema_operational_costs=contract_data.cinema_operational_costs,
-        status=contract_data.status,
-        early_termination_terms=contract_data.early_termination_terms
+        distributor_percentage=contract_data.distributor_percentage,
+        status=contract_data.status
     )
 
     db.add(new_contract)
@@ -207,7 +200,7 @@ async def delete_contract(
     return None
 
 
-@router.get("/{contract_id}/payments", response_model=List[dict])
+@router.get("/{contract_id}/payments", response_model=List[PaymentHistoryResponse])
 async def get_contract_payments(
     contract_id: int,
     current_user: Annotated[User, Depends(get_current_active_user)],
@@ -232,20 +225,185 @@ async def get_contract_payments(
     )
     payments = result.scalars().all()
 
-    return [
-        {
-            "id": payment.id,
-            "week_number": payment.week_number,
-            "period_start_date": payment.period_start_date,
-            "period_end_date": payment.period_end_date,
-            "gross_revenue": float(payment.gross_revenue),
-            "cinema_costs": float(payment.cinema_costs),
-            "net_revenue": float(payment.net_revenue),
-            "distributor_percentage": float(payment.distributor_percentage),
-            "distributor_amount": float(payment.distributor_amount),
-            "cinema_amount": float(payment.cinema_amount),
-            "payment_date": payment.payment_date,
-            "status": payment.status.value if payment.status else None
-        }
-        for payment in payments
-    ]
+    return payments
+
+
+@router.post("/{contract_id}/payments/{payment_id}/pay", response_model=PaymentHistoryResponse)
+async def mark_payment_as_paid(
+    contract_id: int,
+    payment_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark a contract payment as paid."""
+    # Verify contract exists
+    contract_result = await db.execute(select(RentalContract).filter(RentalContract.id == contract_id))
+    contract = contract_result.scalar_one_or_none()
+
+    if not contract:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Rental contract with id {contract_id} not found"
+        )
+
+    # Verify payment exists and belongs to this contract
+    payment_result = await db.execute(
+        select(PaymentHistory)
+        .filter(
+            and_(
+                PaymentHistory.id == payment_id,
+                PaymentHistory.rental_contract_id == contract_id
+            )
+        )
+    )
+    payment = payment_result.scalar_one_or_none()
+
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Payment with id {payment_id} not found for contract {contract_id}"
+        )
+
+    # Check if payment is already marked as paid
+    if payment.payment_status == PaymentStatus.PAID:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment is already marked as paid"
+        )
+
+    # Update payment status to paid and set payment date
+    payment.payment_status = PaymentStatus.PAID
+    # Set the payment date to current date when marking as paid
+    import pytz
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    payment.payment_date = datetime.now(moscow_tz).date()
+
+    # If all payments for this contract are now paid, change contract status to PAID
+    remaining_payments_result = await db.execute(
+        select(PaymentHistory)
+        .filter(
+            and_(
+                PaymentHistory.rental_contract_id == contract_id,
+                PaymentHistory.payment_status != PaymentStatus.PAID
+            )
+        )
+    )
+    remaining_payments = remaining_payments_result.scalars().all()
+
+    if not remaining_payments:
+        # All payments for this contract are now paid, update contract status
+        contract.status = ContractStatus.PAID
+
+    await db.commit()
+    await db.refresh(payment)
+
+    return payment
+
+
+@router.get("/payments/pending", response_model=List[PaymentHistoryResponse])
+async def get_pending_payments(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    cinema_id: Optional[int] = Query(None, description="Filter by cinema ID for admin users"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all pending payments with optional cinema filter for admin users."""
+    # Verify user has proper permissions
+    if current_user.role.name not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin and super admin users can access pending payments"
+        )
+
+    query = (
+        select(PaymentHistory)
+        .join(RentalContract, PaymentHistory.rental_contract_id == RentalContract.id)
+        .filter(PaymentHistory.payment_status == PaymentStatus.PENDING)
+        .order_by(PaymentHistory.calculation_date.desc())
+    )
+
+    # For admin users, only show payments related to their cinema
+    if current_user.role.name == "admin" and cinema_id:
+        # Admin can only see payments for contracts related to their cinema
+        query = query.filter(RentalContract.cinema_id == cinema_id)
+    elif current_user.role.name == "admin" and not cinema_id:
+        # If no cinema ID provided, use admin's assigned cinema
+        if current_user.cinema_id:
+            query = query.filter(RentalContract.cinema_id == current_user.cinema_id)
+    # For super admin users, show all pending payments
+    # No filter is applied for super_admin, they see all payments
+
+    result = await db.execute(query)
+    payments = result.scalars().all()
+
+    return payments
+
+
+@router.post("/payments/{payment_id}/pay", response_model=PaymentHistoryResponse)
+async def pay_contract_payment(
+    payment_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Pay a specific contract payment (global payment endpoint)."""
+    # Verify user has proper permissions
+    if current_user.role.name not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin and super admin users can pay contract payments"
+        )
+
+    # Get the payment with its contract
+    payment_result = await db.execute(
+        select(PaymentHistory)
+        .join(RentalContract, PaymentHistory.rental_contract_id == RentalContract.id)
+        .filter(PaymentHistory.id == payment_id)
+    )
+    payment = payment_result.scalar_one_or_none()
+
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Payment with id {payment_id} not found"
+        )
+
+    # Check if payment is already marked as paid
+    if payment.payment_status == PaymentStatus.PAID:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment is already marked as paid"
+        )
+
+    # Verify admin permissions - admin can only pay for their cinema's contracts
+    if current_user.role.name == "admin":
+        if not current_user.cinema_id or current_user.cinema_id != payment.rental_contract.cinema_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin can only pay for contracts related to their cinema"
+            )
+
+    # Update payment status to paid and set payment date
+    payment.payment_status = PaymentStatus.PAID
+    import pytz
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    payment.payment_date = datetime.now(moscow_tz).date()
+
+    # Check if all payments for this contract are now paid
+    remaining_payments_result = await db.execute(
+        select(PaymentHistory)
+        .filter(
+            and_(
+                PaymentHistory.rental_contract_id == payment.rental_contract_id,
+                PaymentHistory.payment_status != PaymentStatus.PAID
+            )
+        )
+    )
+    remaining_payments = remaining_payments_result.scalars().all()
+
+    if not remaining_payments:
+        # All payments for this contract are now paid, update contract status
+        payment.rental_contract.status = ContractStatus.PAID
+
+    await db.commit()
+    await db.refresh(payment)
+
+    return payment

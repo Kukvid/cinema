@@ -12,13 +12,16 @@ from app.config import settings
 from app.models.order import Order
 from app.models.ticket import Ticket
 from app.models.concession_preorder import ConcessionPreorder
-from app.models.enums import OrderStatus, TicketStatus, PreorderStatus, SessionStatus
+from app.models.enums import OrderStatus, TicketStatus, PreorderStatus, SessionStatus, PaymentStatus
 from app.database import engine, get_db
 from app.models.bonus_account import BonusAccount
 from app.models.bonus_transaction import BonusTransaction
 from app.models.enums import BonusTransactionType
 from app.models.session import Session
-from app.models.enums import SessionStatus
+from app.models.payment_history import PaymentHistory
+from app.models.rental_contract import RentalContract
+from app.models.film import Film
+from app.models.enums import SessionStatus, ContractStatus
 import pytz
 
 logger = logging.getLogger(__name__)
@@ -253,6 +256,130 @@ class OrderCleanupService:
                 logger.error(f"Error in update_completed_order_statuses task: {str(e)}", exc_info=True)
                 await db.rollback()
 
+    async def check_rental_contract_expirations(self):
+        """Check for rental contracts that have expired and create pending payments"""
+        logger.info("Running rental contract expiration check task...")
+
+        async with self.SessionLocal() as db:
+            try:
+                current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+
+                # Import required models
+                from app.models.rental_contract import RentalContract
+                from app.models.payment_history import PaymentHistory
+                from app.models.session import Session
+                from app.models.ticket import Ticket
+                from app.models.order import Order
+                from app.models.film import Film
+                from app.models.enums import OrderStatus as OrderStatusEnum, ContractStatus, PaymentStatus
+                from sqlalchemy.orm import selectinload
+                from sqlalchemy import and_
+
+                # Find rental contracts that expired today (end_date < current_date and status is active)
+                # Exclude contracts that already have pending payments created
+                expired_contracts_result = await db.execute(
+                    select(RentalContract)
+                    .filter(
+                        and_(
+                            RentalContract.rental_end_date < current_time.date(),  # Contract has ended
+                            RentalContract.status == ContractStatus.ACTIVE,  # Still active
+                            RentalContract.distributor_percentage > 0  # Has a percentage to calculate
+                        )
+                    )
+                )
+                expired_contracts = expired_contracts_result.scalars().all()
+
+                processed_count = 0
+                for contract in expired_contracts:
+                    # Check if a payment has already been created for this contract's expiration
+                    existing_payment_result = await db.execute(
+                        select(PaymentHistory)
+                        .filter(
+                            and_(
+                                PaymentHistory.rental_contract_id == contract.id,
+                                PaymentHistory.payment_status == PaymentStatus.PENDING
+                            )
+                        )
+                    )
+                    existing_payment = existing_payment_result.scalar_one_or_none()
+
+                    if existing_payment:
+                        # Payment already exists for this contract
+                        continue
+
+                    # Calculate revenue from tickets sold under this contract up to the expiration date
+                    # We need to find tickets from sessions that were part of this contract
+                    # For this, we'll find all sessions for films that were under this rental contract
+
+                    # First, get the start and end dates for the contract period
+                    # Get sessions that were part of this contract during its rental period
+                    sessions_result = await db.execute(
+                        select(Session)
+                        .join(Film, Session.film_id == Film.id)
+                        .filter(
+                            and_(
+                                Film.id == contract.film_id,
+                                Session.start_datetime >= contract.rental_start_date,
+                                Session.start_datetime <= contract.rental_end_date
+                            )
+                        )
+                    )
+                    contract_sessions = sessions_result.scalars().all()
+
+                    if not contract_sessions:
+                        logger.info(f"No sessions found for contract {contract.id}, skipping payment creation")
+                        continue
+
+                    # Get tickets for these sessions that were paid during the contract period
+                    session_ids = [session.id for session in contract_sessions]
+                    tickets_result = await db.execute(
+                        select(Ticket)
+                        .join(Order, Ticket.order_id == Order.id)
+                        .filter(
+                            and_(
+                                Ticket.session_id.in_(session_ids),
+                                Order.status == OrderStatusEnum.paid,
+                                Ticket.purchase_date <= contract.rental_end_date  # Only tickets purchased during contract period
+                            )
+                        )
+                    )
+                    contract_tickets = tickets_result.scalars().all()
+
+                    # Calculate total revenue from tickets
+                    total_revenue = sum(float(ticket.price) for ticket in contract_tickets)
+
+                    # Calculate distributor's share (percentage of total revenue)
+                    distributor_share = total_revenue * float(contract.distributor_percentage) / 100
+
+                    # Create payment history record
+                    new_payment = PaymentHistory(
+                        rental_contract_id=contract.id,
+                        calculated_amount=distributor_share,
+                        calculation_date=current_time,
+                        payment_status=PaymentStatus.PENDING,
+                        payment_date=None,  # Initially no payment date until paid
+                        payment_document_number=None  # Initially no document number
+                    )
+
+                    db.add(new_payment)
+
+                    # Update the contract status to indicate it has pending payments
+                    contract.status = ContractStatus.PENDING  # Change status to pending payment
+
+                    logger.info(f"Created pending payment of {distributor_share} for expired contract {contract.id}")
+
+                    processed_count += 1
+
+                if processed_count > 0:
+                    await db.commit()
+                    logger.info(f"Created {processed_count} pending payments for expired rental contracts")
+                else:
+                    logger.info("No expired rental contracts requiring payment creation found")
+
+            except Exception as e:
+                logger.error(f"Error in check_rental_contract_expirations task: {str(e)}", exc_info=True)
+                await db.rollback()
+
     def start_scheduler(self):
         """Start the scheduler with all cleanup tasks"""
         self.scheduler.add_job(
@@ -278,6 +405,15 @@ class OrderCleanupService:
             trigger=IntervalTrigger(minutes=2),  # Run every 2 minutes to update completed order statuses
             id='update_completed_order_statuses',
             name='Update completed order statuses',
+            replace_existing=True
+        )
+
+        # Add the rental contract expiration check job that runs every 2 minutes
+        self.scheduler.add_job(
+            self.check_rental_contract_expirations,
+            trigger=IntervalTrigger(minutes=2),  # Run every 2 minutes to check for expired rental contracts
+            id='check_rental_contract_expirations',
+            name='Check rental contract expirations',
             replace_existing=True
         )
 
