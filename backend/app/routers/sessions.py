@@ -83,10 +83,15 @@ async def get_sessions(
     if session_date:
         # Filter sessions that start on the given date
         next_day = session_date + timedelta(days=1)
+        start_datetime = datetime.combine(session_date, datetime.min.time())
+        end_datetime = datetime.combine(next_day, datetime.min.time())
+        # Убедимся, что объекты datetime не имеют таймзоны
+        start_datetime = start_datetime.replace(tzinfo=None)
+        end_datetime = end_datetime.replace(tzinfo=None)
         query = query.filter(
             and_(
-                Session.start_datetime >= datetime.combine(session_date, datetime.min.time()),
-                Session.start_datetime < datetime.combine(next_day, datetime.min.time())
+                Session.start_datetime >= start_datetime,
+                Session.start_datetime < end_datetime
             )
         )
 
@@ -229,7 +234,33 @@ async def create_session(
     current_user: Annotated[User, Depends(get_current_active_user)],
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new session with conflict checking."""
+    """Create a new session with conflict checking and permission validation."""
+    # Check user permissions - only admin and super_admin can create sessions
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin users can create sessions"
+        )
+
+    # Verify hall exists and get cinema information
+    result = await db.execute(
+        select(Hall).options(selectinload(Hall.cinema)).filter(Hall.id == session_data.hall_id)
+    )
+    hall = result.scalar_one_or_none()
+
+    if not hall:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Hall with id {session_data.hall_id} not found"
+        )
+
+    # Check if user has permission to create session in this cinema
+    if current_user.role.name == "admin" and hall.cinema_id != current_user.cinema_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin can only create sessions in their assigned cinema"
+        )
+
     # Verify film exists
     result = await db.execute(select(Film).filter(Film.id == session_data.film_id))
     film = result.scalar_one_or_none()
@@ -240,31 +271,32 @@ async def create_session(
             detail=f"Film with id {session_data.film_id} not found"
         )
 
-    # Verify hall exists
-    result = await db.execute(select(Hall).filter(Hall.id == session_data.hall_id))
-    hall = result.scalar_one_or_none()
-
-    if not hall:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Hall with id {session_data.hall_id} not found"
-        )
-
     # Check if the session date is in the past
     current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
-    if session_data.start_datetime < current_time:
+    session_start_time = session_data.start_datetime.replace(tzinfo=None) if session_data.start_datetime.tzinfo else session_data.start_datetime
+    if session_start_time < current_time:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot create a session in the past"
         )
 
+    # Check if the session ends before it starts
+    start_time = session_data.start_datetime.replace(tzinfo=None) if session_data.start_datetime.tzinfo else session_data.start_datetime
+    end_time = session_data.end_datetime.replace(tzinfo=None) if session_data.end_datetime.tzinfo else session_data.end_datetime
+    if end_time <= start_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session end time must be after start time"
+        )
+
     # Check if the film has an active rental contract for this session's date
+    session_date = session_data.start_datetime.date()
     result = await db.execute(
         select(RentalContract).filter(
             and_(
                 RentalContract.film_id == session_data.film_id,
-                RentalContract.rental_start_date <= session_data.start_datetime.date(),
-                RentalContract.rental_end_date >= session_data.start_datetime.date(),
+                RentalContract.rental_start_date <= session_date,
+                RentalContract.rental_end_date >= session_date,
                 RentalContract.status.in_(["ACTIVE", "PENDING", "PAID"])  # Active, pending payment, or paid contracts
             )
         )
@@ -282,22 +314,22 @@ async def create_session(
         select(Session).filter(
             and_(
                 Session.hall_id == session_data.hall_id,
-                Session.status != SessionStatus.cancelled,
+                Session.status != SessionStatus.CANCELLED,  # Use enum instead of string
                 or_(
                     # New session starts during existing session
                     and_(
-                        Session.start_datetime <= session_data.start_datetime,
+                        Session.start_datetime < session_data.end_datetime,
                         Session.end_datetime > session_data.start_datetime
                     ),
                     # New session ends during existing session
                     and_(
                         Session.start_datetime < session_data.end_datetime,
-                        Session.end_datetime >= session_data.end_datetime
+                        Session.end_datetime > session_data.start_datetime
                     ),
                     # New session completely overlaps existing session
                     and_(
-                        Session.start_datetime >= session_data.start_datetime,
-                        Session.end_datetime <= session_data.end_datetime
+                        Session.start_datetime <= session_data.start_datetime,
+                        Session.end_datetime >= session_data.end_datetime
                     )
                 )
             )
@@ -334,8 +366,13 @@ async def update_session(
     current_user: Annotated[User, Depends(get_current_active_user)],
     db: AsyncSession = Depends(get_db)
 ):
-    """Update session."""
-    result = await db.execute(select(Session).filter(Session.id == session_id))
+    """Update session (limited fields)."""
+    # Verify session exists and get hall info
+    result = await db.execute(
+        select(Session)
+        .options(selectinload(Session.hall).selectinload(Hall.cinema))
+        .filter(Session.id == session_id)
+    )
     session = result.scalar_one_or_none()
 
     if not session:
@@ -343,6 +380,102 @@ async def update_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session with id {session_id} not found"
         )
+
+    # Check user permissions
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin users can update sessions"
+        )
+
+    # For admin users, check if they can manage session in this cinema
+    if current_user.role.name == "admin" and session.hall.cinema_id != current_user.cinema_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin can only update sessions in their assigned cinema"
+        )
+
+    # Check if the session date is in the past when changing the date
+    if session_data.start_datetime:
+        current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+        session_start_time = session_data.start_datetime.replace(tzinfo=None) if session_data.start_datetime.tzinfo else session_data.start_datetime
+        if session_start_time < current_time:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot update session to a past date"
+            )
+
+    # Check if the session ends before it starts when changing the end time
+    if session_data.end_datetime:
+        start_time = session_data.start_datetime or session.start_datetime
+        start_time_naive = start_time.replace(tzinfo=None) if start_time.tzinfo else start_time
+        end_time_naive = session_data.end_datetime.replace(tzinfo=None) if session_data.end_datetime.tzinfo else session_data.end_datetime
+        if end_time_naive <= start_time_naive:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Session end time must be after start time"
+            )
+
+    # Check if the film has an active rental contract for the new session date
+    if session_data.start_datetime:
+        session_date = session_data.start_datetime.date()
+        result = await db.execute(
+            select(RentalContract).filter(
+                and_(
+                    RentalContract.film_id == session.film_id,
+                    RentalContract.rental_start_date <= session_date,
+                    RentalContract.rental_end_date >= session_date,
+                    RentalContract.status.in_(["ACTIVE"])
+                )
+            )
+        )
+        rental_contract = result.scalar_one_or_none()
+
+        if not rental_contract:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No active rental contract found for the film on the specified date"
+            )
+
+    # If changing time, check for time conflicts in the same hall
+    if session_data.start_datetime or session_data.end_datetime:
+        new_start = session_data.start_datetime or session.start_datetime
+        new_end = session_data.end_datetime or session.end_datetime
+
+        # Check for time conflicts in the same hall
+        result = await db.execute(
+            select(Session).filter(
+                and_(
+                    Session.hall_id == session.hall_id,
+                    Session.id != session_id,  # Exclude current session
+                    Session.status != SessionStatus.CANCELLED,
+                    or_(
+                        # New session starts during existing session
+                        and_(
+                            Session.start_datetime < new_end,
+                            Session.end_datetime > new_start
+                        ),
+                        # New session ends during existing session
+                        and_(
+                            Session.start_datetime < new_end,
+                            Session.end_datetime > new_start
+                        ),
+                        # New session completely overlaps existing session
+                        and_(
+                            Session.start_datetime <= new_start,
+                            Session.end_datetime >= new_end
+                        )
+                    )
+                )
+            )
+        )
+        conflicting_session = result.scalar_one_or_none()
+
+        if conflicting_session:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Time conflict with existing session (ID: {conflicting_session.id}) in the same hall"
+            )
 
     # Update fields
     update_data = session_data.model_dump(exclude_unset=True)
@@ -362,13 +495,32 @@ async def delete_session(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete session."""
-    result = await db.execute(select(Session).filter(Session.id == session_id))
+    # Verify session exists and get hall info
+    result = await db.execute(
+        select(Session)
+        .options(selectinload(Session.hall).selectinload(Hall.cinema))
+        .filter(Session.id == session_id)
+    )
     session = result.scalar_one_or_none()
 
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session with id {session_id} not found"
+        )
+
+    # Check user permissions
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin users can delete sessions"
+        )
+
+    # For admin users, check if they can manage session in this cinema
+    if current_user.role.name == "admin" and session.hall.cinema_id != current_user.cinema_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin can only delete sessions in their assigned cinema"
         )
 
     await db.delete(session)

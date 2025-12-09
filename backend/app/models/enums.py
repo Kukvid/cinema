@@ -33,11 +33,11 @@ class DistributorStatus(str, Enum):
 
 
 class ContractStatus(str, Enum):
-    ACTIVE = "active"
-    EXPIRED = "expired"
-    TERMINATED = "terminated"
-    PENDING = "pending"
-    PAID = "paid"
+    ACTIVE = "ACTIVE"
+    EXPIRED = "EXPIRED"
+    TERMINATED = "TERMINATED"
+    PENDING = "PENDING"
+    PAID = "PAID"
 
 
 class PaymentStatus(str, Enum):
