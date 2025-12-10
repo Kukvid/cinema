@@ -16,6 +16,8 @@ from app.config import get_settings
 import pytz
 from sqlalchemy.orm import selectinload
 
+from app.models import Role
+
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -82,8 +84,12 @@ async def register(
             detail="Email already registered"
         )
 
+    role_result = await db.execute(select(Role).where(Role.name == 'user'))
+    user_role = role_result.scalar_one_or_none()
+
     # Create new user
     new_user = User(
+        role_id=user_role.id,
         email=user_data.email,
         password_hash=get_password_hash(user_data.password),
         first_name=user_data.first_name,
@@ -104,16 +110,35 @@ async def register(
 
     # Create bonus account for new user with initial bonus
     settings = get_settings()
-    bonus_account = BonusAccount(
+    new_bonus_account = BonusAccount(
         user_id=new_user.id,
         balance=float(settings.BONUS_INITIAL_AMOUNT)
     )
-    db.add(bonus_account)
+    db.add(new_bonus_account)
 
     await db.commit()
     await db.refresh(new_user)
 
-    return new_user
+    # Get user with role relationship
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.role))
+        .filter(User.id == new_user.id)
+    )
+    user_with_role = result.scalar_one()
+
+    # Create user response with bonus balance and role name
+    user_dict = user_with_role.__dict__.copy()
+    user_dict['bonus_balance'] = new_bonus_account.balance
+
+    # Get role name from the role relationship
+    if user_with_role.role:
+        user_dict['role'] = user_with_role.role.name
+    else:
+        user_dict['role'] = 'user'  # default role
+
+    # Convert to UserResponse model
+    return UserResponse.model_validate(user_dict)
 
 
 @router.post("/login", response_model=Token)
@@ -215,9 +240,21 @@ async def update_profile(
         )
         bonus_account = bonus_account_result.scalar_one_or_none()
 
-        # Create user response with bonus balance
+        # Create user response with bonus balance and role name
         user_dict = current_user.__dict__.copy()
         user_dict['bonus_balance'] = bonus_account.balance if bonus_account else 0.00
+
+        # Get role name from the role relationship
+        if hasattr(current_user, 'role') and current_user.role:
+            user_dict['role'] = current_user.role.name
+        else:
+            # If role is not loaded, we may need to fetch it separately
+            if hasattr(current_user, 'role_id') and current_user.role_id:
+                role_result = await db.execute(select(Role).where(Role.id == current_user.role_id))
+                role = role_result.scalar_one_or_none()
+                user_dict['role'] = role.name if role else 'user'
+            else:
+                user_dict['role'] = 'user'  # default role
 
         return UserResponse.model_validate(user_dict)
     except Exception as e:

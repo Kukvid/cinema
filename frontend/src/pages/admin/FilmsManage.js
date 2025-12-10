@@ -117,6 +117,9 @@ const FilmsManage = () => {
             reset({
                 ...film,
                 genre_ids: genreIds,
+                duration_minutes: film.duration_minutes || 0,
+                imdb_rating: film.imdb_rating,
+                kinopoisk_rating: film.kinopoisk_rating,
                 poster_url: film.poster_url || "",
             });
         } else {
@@ -124,8 +127,9 @@ const FilmsManage = () => {
                 title: "",
                 description: "",
                 genre_ids: [],
-                duration: 0,
-                rating: 0,
+                duration_minutes: 0,
+                imdb_rating: null,
+                kinopoisk_rating: null,
                 trailer_url: "",
                 poster_url: ''
             });
@@ -144,11 +148,15 @@ const FilmsManage = () => {
             setFormLoading(true);
             setError(null);
 
-            // Prepare film data with genre_ids
+            // Prepare film data with proper field mapping
             const filmData = {
                 ...data,
                 genre_ids: data.genre_ids || [], // Ensure genre_ids is always an array
-                poster_url: data.poster_url || null
+                duration_minutes: parseInt(data.duration_minutes) || 0,  // Ensure this field name matches backend
+                imdb_rating: data.imdb_rating ? parseFloat(data.imdb_rating) : null,  // Ensure proper type conversion
+                kinopoisk_rating: data.kinopoisk_rating ? parseFloat(data.kinopoisk_rating) : null,  // Ensure proper type conversion
+                poster_url: data.poster_url || null,
+                trailer_url: data.trailer_url || null
             };
 
             let film;
@@ -407,15 +415,23 @@ const FilmsManage = () => {
                             label="Длительность (мин)"
                             margin="normal"
                             type="number"
-                            {...register("duration")}
+                            {...register("duration_minutes")}
                         />
                         <TextField
                             fullWidth
-                            label="Рейтинг (0-10)"
+                            label="IMDB Рейтинг (0-10)"
                             margin="normal"
                             type="number"
                             inputProps={{ step: 0.1, min: 0, max: 10 }}
-                            {...register("rating")}
+                            {...register("imdb_rating")}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Кинопоиск Рейтинг (0-10)"
+                            margin="normal"
+                            type="number"
+                            inputProps={{ step: 0.1, min: 0, max: 10 }}
+                            {...register("kinopoisk_rating")}
                         />
                         <TextField
                             fullWidth

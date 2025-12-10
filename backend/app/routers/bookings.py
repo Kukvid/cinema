@@ -210,15 +210,16 @@ async def create_booking(
     db.add(new_order)
     await db.flush()
 
-    # Create transaction record for the deduction
-    bonus_transaction = BonusTransaction(
-        bonus_account_id=bonus_account.id,
-        order_id=new_order.id,  # Will be updated after order creation
-        transaction_date=current_time,  # Use the same creation time as the order
-        amount=-bonus_deduction,  # Negative amount to indicate deduction
-        transaction_type=BonusTransactionType.DEDUCTION,
-    )
-    db.add(bonus_transaction)
+    # Create transaction record for the deduction only if bonus points were used
+    if bonus_deduction > 0 and bonus_account:
+        bonus_transaction = BonusTransaction(
+            bonus_account_id=bonus_account.id,
+            order_id=new_order.id,  # Will be updated after order creation
+            transaction_date=current_time,  # Use the same creation time as the order
+            amount=-bonus_deduction,  # Negative amount to indicate deduction
+            transaction_type=BonusTransactionType.DEDUCTION,
+        )
+        db.add(bonus_transaction)
 
     # Generate QR code for the order
     order_qr = generate_order_qr(new_order.id)

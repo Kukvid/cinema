@@ -40,4 +40,9 @@ export const filmsAPI = {
         });
         return response.data;
     },
+
+    getFilmsWithActiveContracts: async (cinemaId) => {
+        const response = await axios.get(`/films/cinema/${cinemaId}/with-contracts`);
+        return response.data;
+    },
 };

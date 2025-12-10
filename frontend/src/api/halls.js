@@ -25,4 +25,10 @@ export const hallsAPI = {
     const response = await axios.delete(`/halls/${id}`);
     return response.data;
   },
+
+  getHallsWithCinema: async (cinemaId = null) => {
+    const params = cinemaId ? { cinema_id: cinemaId } : {};
+    const response = await axios.get('/halls/with-cinema', { params });
+    return response.data;
+  },
 };

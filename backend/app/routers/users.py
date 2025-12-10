@@ -88,6 +88,9 @@ async def get_users(
         else:
             user_dict['role'] = 'user'
 
+        # Remove SQLAlchemy state attributes that shouldn't be serialized
+        user_dict.pop('_sa_instance_state', None)
+
         users_with_bonus.append(UserResponse.model_validate(user_dict))
 
     return users_with_bonus
@@ -132,6 +135,9 @@ async def get_user(
         user_dict['role'] = user.role.name
     else:
         user_dict['role'] = 'user'
+
+    # Remove SQLAlchemy state attributes that shouldn't be serialized
+    user_dict.pop('_sa_instance_state', None)
 
     return UserResponse.model_validate(user_dict)
 
@@ -184,6 +190,9 @@ async def update_user(
         user_dict['role'] = user.role.name
     else:
         user_dict['role'] = 'user'
+
+    # Remove SQLAlchemy state attributes that shouldn't be serialized
+    user_dict.pop('_sa_instance_state', None)
 
     return UserResponse.model_validate(user_dict)
 
@@ -329,6 +338,9 @@ async def create_user(
         user_dict['role'] = created_user.role.name
     else:
         user_dict['role'] = None # или 'user'
+
+    # Remove SQLAlchemy state attributes that shouldn't be serialized
+    user_dict.pop('_sa_instance_state', None)
 
     # Возвращаем валидированный объект Pydantic, используя обновленный словарь
     # С той же оговоркой про from_attributes.

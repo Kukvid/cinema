@@ -107,10 +107,14 @@ async def process_payment(
     transaction_id = f"TXN-{payment_time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(4).upper()}"
 
     # Check if a payment already exists for this order
+    # Check if a payment already exists for this order (use first() to handle potential duplicates)
     existing_payment_query = await db.execute(
-        select(Payment).filter(Payment.order_id == order.id)
+        select(Payment)
+        .filter(Payment.order_id == order.id)
+        .order_by(Payment.id.desc())  # Get the most recent payment if there are multiple
     )
-    existing_payment = existing_payment_query.scalar_one_or_none()
+    existing_payment_row = existing_payment_query.first()
+    existing_payment = existing_payment_row[0] if existing_payment_row else None
 
     if existing_payment:
         # If a payment already exists and is not in a final state, we might want to update it
@@ -246,12 +250,15 @@ async def get_payment_status(
     db: AsyncSession = Depends(get_db)
 ):
     """Get payment status for an order."""
+    # Get payment status (use first() with ordering to handle potential duplicates)
     result = await db.execute(
         select(Payment)
         .join(Order)
         .filter(Order.id == order_id, Order.user_id == current_user.id)
+        .order_by(Payment.id.desc())  # Get the most recent payment if there are multiple
     )
-    payment = result.scalar_one_or_none()
+    payment_row = result.first()
+    payment = payment_row[0] if payment_row else None
 
     if not payment:
         raise HTTPException(
@@ -312,10 +319,14 @@ async def get_payment_details(
     preorders = preorders_result.scalars().all()
 
     # Get payment to retrieve transaction_id
+    # Use first() with ordering to get the most recent payment in case of duplicates
     payment_result = await db.execute(
-        select(Payment).filter(Payment.order_id == order_id)
+        select(Payment)
+        .filter(Payment.order_id == order_id)
+        .order_by(Payment.id.desc())  # Get the most recent payment if there are multiple
     )
-    payment = payment_result.scalar_one_or_none()
+    payment = payment_result.first()
+    payment = payment[0] if payment else None  # Extract payment object from row
 
     # Reconstruct QR data
     qr_data = None

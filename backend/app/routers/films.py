@@ -13,7 +13,8 @@ from app.models.user import User
 from app.models.session import Session
 from app.models.hall import Hall
 from app.models.ticket import Ticket
-from app.models.enums import TicketStatus
+from app.models.rental_contract import RentalContract
+from app.models.enums import TicketStatus, ContractStatus
 from app.schemas.film import FilmCreate, FilmUpdate, FilmResponse, FilmsPaginatedResponse
 from app.schemas.session import SessionResponse
 from app.routers.auth import get_current_active_user
@@ -318,3 +319,32 @@ async def delete_film(
     await db.commit()
 
     return None
+
+
+@router.get("/cinema/{cinema_id}/with-contracts", response_model=List[FilmResponse])
+async def get_films_with_active_contracts(
+    cinema_id: int,
+    current_date: datetime = Query(default_factory=datetime.now, description="Date to check for active contracts"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get films that have active contracts with the specified cinema on the given date."""
+    # Join Film, RentalContract, and check for active contracts for the cinema
+    # on the specified date. Include genres for proper serialization
+    from sqlalchemy.orm import selectinload
+
+    query = (
+        select(Film)
+        .options(selectinload(Film.genres))
+        .join(RentalContract, Film.id == RentalContract.film_id)
+        .filter(
+            RentalContract.cinema_id == cinema_id,
+            RentalContract.rental_end_date >= current_date.date(),
+            RentalContract.status.in_([ContractStatus.ACTIVE])
+        )
+        .distinct()
+    )
+
+    result = await db.execute(query)
+    films = result.scalars().unique().all()
+
+    return films

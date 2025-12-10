@@ -7,10 +7,56 @@ from app.database import get_db
 from app.models.hall import Hall
 from app.models.cinema import Cinema
 from app.models.user import User
-from app.schemas.hall import HallCreate, HallUpdate, HallResponse
+from app.schemas.hall import HallCreate, HallUpdate, HallResponse, HallWithCinemaResponse
 from app.routers.auth import get_current_active_user
 
 router = APIRouter()
+
+
+@router.get("/with-cinema", response_model=List[HallWithCinemaResponse])
+async def get_halls_with_cinema(
+    cinema_id: int | None = Query(None, description="Filter by cinema ID"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get list of halls with cinema information, optionally filtered by cinema."""
+    query = select(
+        Hall.id,
+        Hall.hall_number,
+        Hall.name,
+        Hall.capacity,
+        Hall.hall_type,
+        Hall.status,
+        Hall.cinema_id,
+        Cinema.name.label('cinema_name'),
+        Cinema.city.label('cinema_city')
+    ).join(Cinema, Hall.cinema_id == Cinema.id)
+
+    if cinema_id:
+        query = query.filter(Hall.cinema_id == cinema_id)
+
+    query = query.offset(skip).limit(limit)
+    result = await db.execute(query)
+    halls_data = result.all()
+
+    # Convert to response format
+    halls_with_cinema = []
+    for row in halls_data:
+        hall_dict = {
+            'id': row.id,
+            'hall_number': row.hall_number,
+            'name': row.name,
+            'capacity': row.capacity,
+            'hall_type': row.hall_type,
+            'status': row.status,
+            'cinema_id': row.cinema_id,
+            'cinema_name': row.cinema_name,
+            'cinema_city': row.cinema_city
+        }
+        halls_with_cinema.append(HallWithCinemaResponse(**hall_dict))
+
+    return halls_with_cinema
 
 
 @router.get("", response_model=List[HallResponse])

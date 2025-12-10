@@ -73,6 +73,8 @@ async def get_sessions(
     )
 
     # Filter out past sessions unless explicitly requested
+    # Since sessions are stored in Moscow timezone-naive format,
+    # we need to get current Moscow time as naive datetime for comparison
     if not include_past:
         current_time = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
         query = query.filter(Session.start_datetime > current_time)
@@ -310,28 +312,18 @@ async def create_session(
         )
 
     # Check for time conflicts in the same hall
+    # Convert to Moscow timezone-naive for consistent comparison
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    start_dt_naive = session_data.start_datetime.astimezone(moscow_tz).replace(tzinfo=None)
+    end_dt_naive = session_data.end_datetime.astimezone(moscow_tz).replace(tzinfo=None)
+
     result = await db.execute(
         select(Session).filter(
             and_(
                 Session.hall_id == session_data.hall_id,
-                Session.status != SessionStatus.CANCELLED,  # Use enum instead of string
-                or_(
-                    # New session starts during existing session
-                    and_(
-                        Session.start_datetime < session_data.end_datetime,
-                        Session.end_datetime > session_data.start_datetime
-                    ),
-                    # New session ends during existing session
-                    and_(
-                        Session.start_datetime < session_data.end_datetime,
-                        Session.end_datetime > session_data.start_datetime
-                    ),
-                    # New session completely overlaps existing session
-                    and_(
-                        Session.start_datetime <= session_data.start_datetime,
-                        Session.end_datetime >= session_data.end_datetime
-                    )
-                )
+                Session.status != SessionStatus.CANCELLED,  # Don't check conflicts with cancelled sessions
+                Session.start_datetime < end_dt_naive,  # New session starts before existing session ends
+                start_dt_naive < Session.end_datetime   # New session ends after existing session starts
             )
         )
     )
@@ -343,20 +335,31 @@ async def create_session(
             detail=f"Time conflict with existing session (ID: {conflicting_session.id}) in the same hall"
         )
 
+    # Convert datetime values to timezone-naive in Moscow timezone for database storage
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    start_datetime_naive = session_data.start_datetime.astimezone(moscow_tz).replace(tzinfo=None)
+    end_datetime_naive = session_data.end_datetime.astimezone(moscow_tz).replace(tzinfo=None)
+
     new_session = Session(
         film_id=session_data.film_id,
         hall_id=session_data.hall_id,
-        start_datetime=session_data.start_datetime,
-        end_datetime=session_data.end_datetime,
+        start_datetime=start_datetime_naive,
+        end_datetime=end_datetime_naive,
         ticket_price=session_data.ticket_price,
         status=session_data.status
     )
 
     db.add(new_session)
     await db.commit()
-    await db.refresh(new_session)
+    # Refresh the session with relationships loaded
+    result = await db.execute(
+        select(Session)
+        .options(selectinload(Session.hall).selectinload(Hall.cinema), selectinload(Session.film))
+        .filter(Session.id == new_session.id)
+    )
+    new_session_with_relations = result.scalar_one()
 
-    return new_session
+    return new_session_with_relations
 
 
 @router.put("/{session_id}", response_model=SessionResponse)
@@ -425,7 +428,7 @@ async def update_session(
                     RentalContract.film_id == session.film_id,
                     RentalContract.rental_start_date <= session_date,
                     RentalContract.rental_end_date >= session_date,
-                    RentalContract.status.in_(["ACTIVE"])
+                    RentalContract.status.in_(["ACTIVE", "PENDING", "PAID"])
                 )
             )
         )
@@ -443,29 +446,19 @@ async def update_session(
         new_end = session_data.end_datetime or session.end_datetime
 
         # Check for time conflicts in the same hall
+        # Convert to Moscow timezone-naive for consistent comparison
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        start_dt_naive = new_start.astimezone(moscow_tz).replace(tzinfo=None)
+        end_dt_naive = new_end.astimezone(moscow_tz).replace(tzinfo=None)
+
         result = await db.execute(
             select(Session).filter(
                 and_(
                     Session.hall_id == session.hall_id,
                     Session.id != session_id,  # Exclude current session
                     Session.status != SessionStatus.CANCELLED,
-                    or_(
-                        # New session starts during existing session
-                        and_(
-                            Session.start_datetime < new_end,
-                            Session.end_datetime > new_start
-                        ),
-                        # New session ends during existing session
-                        and_(
-                            Session.start_datetime < new_end,
-                            Session.end_datetime > new_start
-                        ),
-                        # New session completely overlaps existing session
-                        and_(
-                            Session.start_datetime <= new_start,
-                            Session.end_datetime >= new_end
-                        )
-                    )
+                    Session.start_datetime < end_dt_naive,  # New session starts before existing session ends
+                    start_dt_naive < Session.end_datetime   # New session ends after existing session starts
                 )
             )
         )
@@ -477,15 +470,27 @@ async def update_session(
                 detail=f"Time conflict with existing session (ID: {conflicting_session.id}) in the same hall"
             )
 
-    # Update fields
+    # Update fields, handling datetime values with timezone conversion
     update_data = session_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(session, field, value)
+        if field in ['start_datetime', 'end_datetime'] and value:
+            # Convert datetime values to timezone-naive in Moscow timezone for database storage
+            moscow_tz = pytz.timezone('Europe/Moscow')
+            converted_value = value.astimezone(moscow_tz).replace(tzinfo=None)
+            setattr(session, field, converted_value)
+        else:
+            setattr(session, field, value)
 
     await db.commit()
-    await db.refresh(session)
+    # Refresh the session with relationships loaded
+    result = await db.execute(
+        select(Session)
+        .options(selectinload(Session.hall).selectinload(Hall.cinema), selectinload(Session.film))
+        .filter(Session.id == session.id)
+    )
+    session_with_relations = result.scalar_one()
 
-    return session
+    return session_with_relations
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

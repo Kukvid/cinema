@@ -34,3 +34,18 @@ class HallResponse(HallBase):
     id: int
     cinema_id: int
     status: HallStatus
+
+
+# Schema for hall response with cinema information
+class HallWithCinemaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    hall_number: str
+    name: Optional[str]
+    capacity: int
+    hall_type: HallType
+    status: HallStatus
+    cinema_id: int
+    cinema_name: str
+    cinema_city: str
