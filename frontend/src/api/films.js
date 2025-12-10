@@ -1,10 +1,6 @@
 import axios from "./axios";
 
 export const filmsAPI = {
-    // getFilmsWithParams: async (paramsString) => {
-    //     const response = await axios.get(`/films?${paramsString}`);
-    //     return response.data;
-    // },
     getFilms: async (params = {}) => {
       const response = await axios.get('/films', { params });
       return response.data;

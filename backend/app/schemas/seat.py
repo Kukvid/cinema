@@ -29,6 +29,13 @@ class SeatResponse(SeatBase):
     hall_id: int
 
 
+# Schema for seat response with hall and cinema information
+class SeatWithCinemaResponse(SeatResponse):
+    hall_name: str
+    cinema_id: int
+    cinema_name: str
+
+
 # Schema for seat with booking status (used in session seat availability)
 class SeatWithStatus(SeatResponse):
     is_booked: bool = False

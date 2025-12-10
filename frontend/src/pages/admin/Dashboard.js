@@ -218,13 +218,13 @@ const Dashboard = () => {
             description: "Управление категориями товаров",
             restrictedForStaff: true,
         },
-        {
-            title: "Отчеты",
-            icon: <AssessmentIcon />,
-            path: "/admin/reports",
-            description: "Формирование и анализ отчетов",
-            restrictedForStaff: true,
-        },
+        // {
+        //     title: "Отчеты",
+        //     icon: <AssessmentIcon />,
+        //     path: "/admin/reports",
+        //     description: "Формирование и анализ отчетов",
+        //     restrictedForStaff: true,
+        // },
         {
             title: "Промокоды",
             icon: <PromoIcon />,
