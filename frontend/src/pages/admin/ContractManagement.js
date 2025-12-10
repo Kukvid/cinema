@@ -548,17 +548,22 @@ const ContractManagement = () => {
                                                 color:
                                                     contract.status === "ACTIVE"
                                                         ? "#4caf50"
-                                                        : contract.status ===
-                                                            "EXPIRED"
+                                                        : contract.status === "EXPIRED"
                                                           ? "#f44336"
+                                                          : contract.status === "PAID"
+                                                          ? "#226d00ff"
                                                           : "#ffc107",
                                             }}
-                                        >
+                                        > 
                                             {contract.status === "ACTIVE"
                                                 ? "Активен"
                                                 : contract.status === "EXPIRED"
                                                   ? "Просрочен"
-                                                  : contract.status}
+                                                  : contract.status === "PENDING"
+                                                  ? "Неоплачен"
+                                                  : contract.status === "PAID"
+                                                  ? "Оплачен"
+                                                : contract.status}
                                         </Box>
                                     </TableCell>
                                     <TableCell>

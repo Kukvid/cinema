@@ -7,6 +7,7 @@ Promocode service - Бизнес-логика для валидации и ис�
 - Отслеживание и инкремент использования
 """
 
+import pytz
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional, Dict, Any
@@ -213,7 +214,8 @@ async def increment_usage(db: AsyncSession, promocode: Promocode) -> None:
 
 async def check_and_update_expired_promocodes(db: AsyncSession, today: Optional[date] = None) -> int:
     if today is None:
-        today =datetime.now(pytz.timezone('Europe/Moscow')).date()
+        from datetime import datetime
+        today = datetime.now(pytz.timezone('Europe/Moscow')).date()
 
     # Найти все активные промокоды, срок которых истёк
     result = await db.execute(

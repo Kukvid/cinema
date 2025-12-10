@@ -34,8 +34,13 @@ class PromocodeCreate(PromocodeBase):
 # Schema for updating a promocode
 class PromocodeUpdate(BaseModel):
     description: Optional[str] = None
+    discount_type: Optional[DiscountType] = None
+    discount_value: Optional[Decimal] = Field(None, ge=0)
+    valid_from: Optional[date] = None
     valid_until: Optional[date] = None
     max_uses: Optional[int] = Field(None, ge=0)
+    min_order_amount: Optional[Decimal] = Field(None, ge=0)
+    applicable_category: Optional[str] = Field(None, max_length=100)
     status: Optional[PromocodeStatus] = None
 
 

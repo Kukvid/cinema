@@ -1,3 +1,4 @@
+import pytz
 from datetime import date, datetime
 from typing import List, Annotated, Optional
 from decimal import Decimal
@@ -80,7 +81,7 @@ async def get_promocodes(
 
     # Apply valid_today filter
     if valid_today:
-        today =datetime.now(pytz.timezone('Europe/Moscow')).date()
+        today = datetime.now(pytz.timezone('Europe/Moscow')).date()
         query = query.filter(
             and_(
                 Promocode.status == PromocodeStatus.ACTIVE,
