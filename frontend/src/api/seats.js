@@ -30,4 +30,14 @@ export const seatsAPI = {
     const response = await axios.get(`/halls/${hallId}/seats`);
     return response.data;
   },
+
+  getSeatsWithCinema: async (params = {}) => {
+    const response = await axios.get('/seats/with-cinema', { params });
+    return response.data;
+  },
+
+  getSeatWithCinema: async (id) => {
+    const response = await axios.get(`/seats/${id}/with-cinema`);
+    return response.data;
+  },
 };
