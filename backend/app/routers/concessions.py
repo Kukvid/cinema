@@ -99,7 +99,15 @@ async def create_concession_item(
     await db.commit()
     await db.refresh(new_item)
 
-    return new_item
+    # Load the item with the category using a query to ensure relationships are accessible
+    result = await db.execute(
+        select(ConcessionItem)
+        .options(selectinload(ConcessionItem.category))
+        .filter(ConcessionItem.id == new_item.id)
+    )
+    item = result.scalar_one_or_none()
+
+    return item
 
 
 @router.put("/{item_id}", response_model=ConcessionItemResponse)
@@ -127,7 +135,15 @@ async def update_concession_item(
     await db.commit()
     await db.refresh(item)
 
-    return item
+    # Load the updated item with the category using a query to ensure relationships are accessible
+    result = await db.execute(
+        select(ConcessionItem)
+        .options(selectinload(ConcessionItem.category))
+        .filter(ConcessionItem.id == item_id)
+    )
+    updated_item = result.scalar_one_or_none()
+
+    return updated_item
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

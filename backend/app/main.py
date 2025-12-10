@@ -27,7 +27,6 @@ async def lifespan(app: FastAPI):
 
     # Setup admin panel
     try:
-
         setup_admin(app, engine)
     except ImportError as e:
         print(f"Admin panel failed to load: {type(e).__name__}: {e}")

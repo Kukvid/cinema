@@ -35,4 +35,9 @@ export const concessionsAPI = {
         const response = await axios.post("/concessions/preorder-batch", preorderDataList);
         return response.data;
     },
+
+    getAvailableCinemas: async () => {
+        const response = await axios.get('/contracts/cinemas');
+        return response.data;
+    },
 };

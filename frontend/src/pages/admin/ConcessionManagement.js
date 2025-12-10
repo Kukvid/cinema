@@ -43,11 +43,15 @@ const ConcessionManagement = () => {
   const { user: currentUser } = useAuth();
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [cinemas, setCinemas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [selectedCinema, setSelectedCinema] = useState(
+    currentUser?.role === "admin" ? currentUser.cinema_id : ""
+  );
   const [formLoading, setFormLoading] = useState(false);
 
   const {
@@ -63,16 +67,25 @@ const ConcessionManagement = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [selectedCinema]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      // For staff users, only load concession items from their cinema
-      const [itemsData, categoriesData] = await Promise.all([
-        concessionsAPI.getConcessionItems(),
+      // Load cinemas, items, and categories
+      const [cinemasData, categoriesData] = await Promise.all([
+        concessionsAPI.getAvailableCinemas(),
         foodCategoriesAPI.getFoodCategories()
       ]);
+
+      setCinemas(cinemasData);
+
+      // Load concession items with cinema filter
+      const itemsParams = {};
+      if (selectedCinema) {
+        itemsParams.cinema_id = selectedCinema;
+      }
+      const itemsData = await concessionsAPI.getConcessionItems(itemsParams);
 
       // For staff, filter items to only show items from their cinema
       let filteredItems = itemsData;
@@ -99,7 +112,10 @@ const ConcessionManagement = () => {
         name: item.name,
         description: item.description,
         price: item.price,
+        portion_size: item.portion_size || '',
+        calories: item.calories || '',
         category_id: item.category_id,
+        cinema_id: item.cinema_id,
         status: item.status,
         stock_quantity: item.stock_quantity,
         image_url: item.image_url || ''
@@ -109,8 +125,11 @@ const ConcessionManagement = () => {
         name: '',
         description: '',
         price: '',
+        portion_size: '',
+        calories: '',
         category_id: '',
-        status: true,
+        cinema_id: currentUser?.role === "admin" ? currentUser.cinema_id : cinemas.length > 0 ? cinemas[0].id : '',
+        status: 'AVAILABLE', // Default to AVAILABLE status
         stock_quantity: 0,
         image_url: ''
       });
@@ -133,7 +152,10 @@ const ConcessionManagement = () => {
         name: data.name,
         description: data.description,
         price: parseFloat(data.price),
+        portion_size: data.portion_size || null,
+        calories: data.calories ? parseInt(data.calories) : null,
         category_id: parseInt(data.category_id),
+        cinema_id: parseInt(data.cinema_id),
         status: data.status,
         stock_quantity: parseInt(data.stock_quantity),
         image_url: data.image_url || null
@@ -186,19 +208,41 @@ const ConcessionManagement = () => {
         <Typography variant="h4" sx={{ fontWeight: 700, color: '#e50914' }}>
           Управление кинобаром
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-          sx={{
-            background: 'linear-gradient(135deg, #e50914 0%, #b00710 100%)',
-            '&:hover': {
-              background: 'linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)',
-            },
-          }}
-        >
-          Добавить товар
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          {/* Cinema filter dropdown */}
+          {currentUser?.role === 'admin' || currentUser?.role === 'super_admin' ? (
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>Кинотеатр</InputLabel>
+              <Select
+                value={selectedCinema}
+                label="Кинотеатр"
+                onChange={(e) => setSelectedCinema(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>Все кинотеатры</em>
+                </MenuItem>
+                {cinemas.map((cinema) => (
+                  <MenuItem key={cinema.id} value={cinema.id}>
+                    {cinema.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : null}
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+            sx={{
+              background: 'linear-gradient(135deg, #e50914 0%, #b00710 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)',
+              },
+            }}
+          >
+            Добавить товар
+          </Button>
+        </Box>
       </Box>
 
       {error && (
@@ -218,8 +262,11 @@ const ConcessionManagement = () => {
           <TableHead>
             <TableRow>
               <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>Товар</TableCell>
+              <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>Кинотеатр</TableCell>
               <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>Категория</TableCell>
               <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>Цена</TableCell>
+              <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>Размер порции</TableCell>
+              <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>Калорийность</TableCell>
               <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>Наличие</TableCell>
               <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>На складе</TableCell>
               <TableCell sx={{ color: '#e50914', fontWeight: 700 }} align="right">
@@ -230,7 +277,7 @@ const ConcessionManagement = () => {
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
                   <Typography variant="body1" color="text.secondary">
                     Товары не найдены. Создайте первый товар.
                   </Typography>
@@ -260,6 +307,9 @@ const ConcessionManagement = () => {
                     </Box>
                   </TableCell>
                   <TableCell>
+                    {cinemas.find(cinema => cinema.id === item.cinema_id)?.name || 'Кинотеатр не найден'}
+                  </TableCell>
+                  <TableCell>
                     {item.category ? (
                       <Chip
                         label={item.category.name}
@@ -280,6 +330,16 @@ const ConcessionManagement = () => {
                     </Typography>
                   </TableCell>
                   <TableCell>
+                    <Typography variant="body2" color="text.secondary">
+                      {item.portion_size || 'Не указан'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" color="text.secondary">
+                      {item.calories ? `${item.calories} ккал` : 'Не указано'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
                     <Chip
                       label={item.status ? 'Доступен' : 'Недоступен'}
                       size="small"
@@ -292,7 +352,7 @@ const ConcessionManagement = () => {
                       label={item.stock_quantity}
                       size="small"
                       sx={{
-                        background: item.stock_quantity > 10 
+                        background: item.stock_quantity > 10
                           ? 'linear-gradient(135deg, rgba(70, 211, 105, 0.3) 0%, rgba(70, 211, 105, 0.1) 100%)'
                           : 'linear-gradient(135deg, rgba(245, 124, 0, 0.3) 0%, rgba(245, 124, 0, 0.1) 100%)',
                         color: item.stock_quantity > 10 ? '#46d369' : '#f57c00',
@@ -300,7 +360,7 @@ const ConcessionManagement = () => {
                       }}
                     />
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{whiteSpace: 'nowrap'}}>
                     <IconButton
                       onClick={() => handleOpenDialog(item)}
                       sx={{ color: '#46d369', mr: 1 }}
@@ -429,6 +489,64 @@ const ConcessionManagement = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={12} md={6}>
+                <FormControl fullWidth margin="dense" error={!!errors.cinema_id}>
+                  <InputLabel>Кинотеатр</InputLabel>
+                  <Select
+                    label="Кинотеатр"
+                    {...register('cinema_id', {
+                      required: 'Кинотеатр обязателен',
+                      validate: (value) => value !== '' || 'Кинотеатр обязателен',
+                    })}
+                    disabled={!!editingItem} // Can't change cinema for existing items
+                  >
+                    {cinemas.map((cinema) => (
+                      <MenuItem key={cinema.id} value={cinema.id}>
+                        {cinema.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {errors.cinema_id && (
+                    <Typography variant="caption" color="error">
+                      {errors.cinema_id.message}
+                    </Typography>
+                  )}
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  margin="dense"
+                  label="Размер порции"
+                  type="text"
+                  fullWidth
+                  variant="outlined"
+                  {...register('portion_size', {
+                    maxLength: {
+                      value: 50,
+                      message: 'Максимальная длина - 50 символов',
+                    },
+                  })}
+                  error={!!errors.portion_size}
+                  helperText={errors.portion_size?.message}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  margin="dense"
+                  label="Калорийность (ккал)"
+                  type="number"
+                  fullWidth
+                  variant="outlined"
+                  {...register('calories', {
+                    min: {
+                      value: 0,
+                      message: 'Калорийность не может быть отрицательной',
+                    },
+                  })}
+                  error={!!errors.calories}
+                  helperText={errors.calories?.message}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
                 <TextField
                   margin="dense"
                   label="Количество на складе"
@@ -447,16 +565,26 @@ const ConcessionManagement = () => {
                 />
               </Grid>
               <Grid item xs={12} md={6}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={watch('status') || false}
-                      onChange={(e) => setValue('status', e.target.checked)}
-                      color="success"
-                    />
-                  }
-                  label="Доступен для продажи"
-                />
+                <FormControl fullWidth margin="dense" error={!!errors.status}>
+                  <InputLabel>Статус</InputLabel>
+                  <Select
+                    label="Статус"
+                    {...register('status', {
+                      required: 'Статус обязателен',
+                      validate: (value) => value !== '' || 'Статус обязателен',
+                    })}
+                    disabled // Disable as requested
+                  >
+                    <MenuItem value="AVAILABLE">Доступен</MenuItem>
+                    <MenuItem value="OUT_OF_STOCK">Нет в наличии</MenuItem>
+                    <MenuItem value="DISCONTINUED">Снят с продажи</MenuItem>
+                  </Select>
+                  {errors.status && (
+                    <Typography variant="caption" color="error">
+                      {errors.status.message}
+                    </Typography>
+                  )}
+                </FormControl>
               </Grid>
               <Grid item xs={12}>
                 <TextField
