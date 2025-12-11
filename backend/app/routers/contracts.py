@@ -3,7 +3,9 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 import logging
+import pytz
 
 from app.database import get_db
 from app.models.rental_contract import RentalContract
@@ -297,9 +299,21 @@ async def get_contract_payments(
             detail=f"Rental contract with id {contract_id} not found"
         )
 
-    # Get payment history
+    # Get payment history with related entities loaded
     result = await db.execute(
         select(PaymentHistory)
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.film)
+        )
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.distributor)
+        )
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.cinema)
+        )
         .filter(PaymentHistory.rental_contract_id == contract_id)
         .order_by(PaymentHistory.payment_date.desc())
     )
@@ -329,6 +343,18 @@ async def mark_payment_as_paid(
     # Verify payment exists and belongs to this contract
     payment_result = await db.execute(
         select(PaymentHistory)
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.film)
+        )
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.distributor)
+        )
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.cinema)
+        )
         .filter(
             and_(
                 PaymentHistory.id == payment_id,
@@ -353,15 +379,14 @@ async def mark_payment_as_paid(
 
     # Update payment status to paid and set payment date
     payment.payment_status = PaymentStatus.PAID
-    # Set the payment date to current date when marking as paid
-    import pytz
-    moscow_tz = pytz.timezone('Europe/Moscow')
-    payment.payment_date = datetime.now(moscow_tz).date()
+    # Set the payment date to current date in Moscow timezone when marking as paid
+    current_datetime_moscow = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+    payment.payment_date = current_datetime_moscow.date()  # This gets the date in Moscow timezone
 
     # Generate document number if not already set
     if not payment.payment_document_number:
         import random
-        current_time = datetime.now(moscow_tz)
+        current_time = current_datetime_moscow  # Use the same Moscow datetime
         payment.payment_document_number = f"PAY_{payment.rental_contract_id}_{int(current_time.timestamp())}_{random.randint(1000, 9999)}"
 
     # If all payments for this contract are now paid, change contract status to PAID
@@ -400,8 +425,14 @@ async def create_contract_payment(
             detail="Only admin and super admin users can create contract payments"
         )
 
-    # Verify contract exists
-    contract_result = await db.execute(select(RentalContract).filter(RentalContract.id == contract_id))
+    # Verify contract exists with related entities loaded
+    contract_result = await db.execute(
+        select(RentalContract)
+        .options(selectinload(RentalContract.film))
+        .options(selectinload(RentalContract.distributor))
+        .options(selectinload(RentalContract.cinema))
+        .filter(RentalContract.id == contract_id)
+    )
     contract = contract_result.scalar_one_or_none()
 
     if not contract:
@@ -470,7 +501,6 @@ async def create_contract_payment(
     # Calculate distributor's share (percentage of total revenue)
     distributor_share = total_revenue * float(contract.distributor_percentage) / 100
 
-    import pytz
     moscow_tz = pytz.timezone('Europe/Moscow')
     current_time = datetime.now(moscow_tz)
 
@@ -478,7 +508,7 @@ async def create_contract_payment(
     new_payment = PaymentHistory(
         rental_contract_id=contract.id,
         calculated_amount=distributor_share,
-        calculation_date=current_time,
+        calculation_date=current_time,  # This is timezone-aware datetime for calculation
         payment_status=PaymentStatus.PENDING,
         payment_date=None,  # Initially no payment date until paid
         payment_document_number=f"PAY_{contract_id}_{int(current_time.timestamp())}_{random.randint(1000, 9999)}"  # Generate document number
@@ -514,6 +544,18 @@ async def get_all_payments(
 
     query = (
         select(PaymentHistory)
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.film)
+        )
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.distributor)
+        )
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.cinema)
+        )
         .join(RentalContract, PaymentHistory.rental_contract_id == RentalContract.id)
         .order_by(PaymentHistory.calculation_date.desc())
     )
@@ -551,6 +593,18 @@ async def get_pending_payments(
 
     query = (
         select(PaymentHistory)
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.film)
+        )
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.distributor)
+        )
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.cinema)
+        )
         .join(RentalContract, PaymentHistory.rental_contract_id == RentalContract.id)
         .filter(PaymentHistory.payment_status == PaymentStatus.PENDING)
         .order_by(PaymentHistory.calculation_date.desc())
@@ -587,9 +641,21 @@ async def pay_contract_payment(
             detail="Only admin and super admin users can pay contract payments"
         )
 
-    # Get the payment with its contract
+    # Get the payment with its contract and related entities
     payment_result = await db.execute(
         select(PaymentHistory)
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.film)
+        )
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.distributor)
+        )
+        .options(
+            selectinload(PaymentHistory.rental_contract)
+            .selectinload(RentalContract.cinema)
+        )
         .join(RentalContract, PaymentHistory.rental_contract_id == RentalContract.id)
         .filter(PaymentHistory.id == payment_id)
     )
@@ -618,14 +684,13 @@ async def pay_contract_payment(
 
     # Update payment status to paid and set payment date
     payment.payment_status = PaymentStatus.PAID
-    import pytz
-    moscow_tz = pytz.timezone('Europe/Moscow')
-    payment.payment_date = datetime.now(moscow_tz).date()
+    current_datetime_moscow = datetime.now(pytz.timezone('Europe/Moscow')).replace(tzinfo=None)
+    payment.payment_date = current_datetime_moscow.date()  # This gets the date in Moscow timezone
 
     # Generate document number if not already set
     if not payment.payment_document_number:
         import random
-        current_time = datetime.now(moscow_tz)
+        current_time = current_datetime_moscow  # Use the same Moscow datetime
         payment.payment_document_number = f"PAY_{payment.rental_contract_id}_{int(current_time.timestamp())}_{random.randint(1000, 9999)}"
 
     # Check if all payments for this contract are now paid

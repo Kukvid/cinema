@@ -13,7 +13,7 @@ class PaymentHistory(Base):
     calculated_amount = Column(DECIMAL(12, 2), nullable=False)
     calculation_date = Column(DateTime, nullable=False)
     payment_status = Column(SQLEnum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
-    payment_date = Column(Date)
+    payment_date = Column(DateTime)
     payment_document_number = Column(String(100))
 
     # Relationships

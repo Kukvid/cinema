@@ -197,7 +197,14 @@ const ContractManagement = () => {
             if (editingContract) {
                 // Update existing contract (only allow updating specific fields)
                 const updateData = {
-                    rental_end_date: endDate,
+                    film_id: parseInt(formData.film_id),
+                    distributor_id: parseInt(formData.distributor_id),
+                    cinema_id: parseInt(formData.cinema_id),
+                    contract_number: formData.contract_number,
+                    contract_date: new Date(formData.contract_date),
+                    rental_start_date: new Date(formData.rental_start_date),
+                    rental_end_date: new Date(formData.rental_end_date),
+                    distributor_percentage: parseFloat(formData.distributor_percentage),
                     // Don't allow status to be changed through this form
                 };
                 await contractsAPI.updateContract(
