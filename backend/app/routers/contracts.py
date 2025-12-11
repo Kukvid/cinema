@@ -402,7 +402,10 @@ async def mark_payment_as_paid(
     remaining_payments = remaining_payments_result.scalars().all()
 
     if not remaining_payments:
-        # All payments for this contract are now paid, update contract status
+        contract_result = await db.execute(
+            select(RentalContract).filter(RentalContract.id == payment.rental_contract_id)
+        )
+        contract = contract_result.scalar_one()
         contract.status = ContractStatus.PAID
 
     await db.commit()
