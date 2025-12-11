@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
     Container,
     Typography,
@@ -24,26 +24,55 @@ import {
     Checkbox,
     ListItemText,
     ListItem,
+    Paper,
+    InputAdornment,
+    CircularProgress,
+    ListItemIcon,
 } from "@mui/material";
 import {
     Add as AddIcon,
     Edit as EditIcon,
     Delete as DeleteIcon,
     Upload as UploadIcon,
+    Clear as ClearIcon,
+    Search as SearchIcon,
 } from "@mui/icons-material";
 import Loading from "../../components/Loading";
 import { filmsAPI } from "../../api/films";
 import { genresAPI } from "../../api/genres";
 import { useForm } from "react-hook-form";
 
+const ITEM_HEIGHT = 48;
+const ITEM_PADDING_TOP = 8;
+const MenuProps = {
+    PaperProps: {
+        style: {
+            maxHeight: ITEM_HEIGHT * 4.5 + ITEM_PADDING_TOP,
+            width: 250,
+        },
+    },
+};
+
 const FilmsManage = () => {
     const [films, setFilms] = useState([]);
     const [genres, setGenres] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // Разделяем состояния загрузки
+    const [initialLoading, setInitialLoading] = useState(true); // Только для первой загрузки
+    const [searching, setSearching] = useState(false); // Для поиска/фильтрации
+    const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingFilm, setEditingFilm] = useState(null);
     const [formLoading, setFormLoading] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const [page, setPage] = useState(0);
+    const [total, setTotal] = useState(0);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [selectedGenreIds, setSelectedGenreIds] = useState([]);
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+
+    // Флаг первой загрузки
+    const isFirstLoad = useRef(true);
 
     const {
         register,
@@ -57,41 +86,113 @@ const FilmsManage = () => {
     // Watch for selected genres
     const watchedGenreIds = watch("genre_ids") || [];
 
+    // Debounce для поиска
     useEffect(() => {
-        loadData();
+        const handler = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, 400);
+        return () => clearTimeout(handler);
+    }, [searchQuery]);
+
+    // Сброс страницы при изменении фильтров
+    useEffect(() => {
+        setPage(0);
+        setHasMore(true);
+    }, [debouncedSearchQuery, selectedGenreIds]);
+
+    // Загрузка фильмов
+    useEffect(() => {
+        loadFilms();
+    }, [page, debouncedSearchQuery, selectedGenreIds]);
+
+    useEffect(() => {
+        loadGenres();
     }, []);
+
+    const loadGenres = async () => {
+        try {
+            const genresData = await genresAPI.getGenres();
+            setGenres(genresData);
+        } catch (err) {
+            console.error("Failed to load genres:", err);
+            setError("Не удалось загрузить жанры");
+        }
+    };
+
+    const observer = useRef();
+    const lastFilmRef = useCallback(
+        (node) => {
+            if (loadingMore) return;
+            if (observer.current) observer.current.disconnect();
+            observer.current = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting && hasMore) {
+                    setPage((prevPage) => prevPage + 1);
+                }
+            });
+            if (node) observer.current.observe(node);
+        },
+        [loadingMore, hasMore]
+    );
 
     const loadData = async () => {
         try {
-            setLoading(true);
-            const [filmsData, genresData] = await Promise.all([
-                filmsAPI.getFilms(),
-                genresAPI.getGenres(),
-            ]);
-            // API returns paginated response with items field
-            setFilms(filmsData.items || filmsData); // Handle both paginated and non-paginated responses
+            setInitialLoading(true);
+            const genresData = await genresAPI.getGenres();
             setGenres(genresData);
             setError(null);
         } catch (err) {
             setError("Не удалось загрузить данные");
         } finally {
-            setLoading(false);
+            setInitialLoading(false);
         }
     };
 
-    const loadFilms = async () => {
+    const loadFilms = useCallback(async () => {
         try {
-            setLoading(true);
-            const data = await filmsAPI.getFilms();
-            // API returns paginated response with items field
-            setFilms(data.items || data); // Handle both paginated and non-paginated responses
+            // Определяем тип загрузки
+            if (isFirstLoad.current) {
+                setInitialLoading(true);
+            } else if (page === 0) {
+                setSearching(true); // Поиск/фильтрация - НЕ скрываем страницу
+            } else {
+                setLoadingMore(true);
+            }
+
+            const params = {
+                skip: page * 20,
+                limit: 20,
+            };
+
+            if (selectedGenreIds.length > 0) {
+                params.genre_ids = selectedGenreIds.join(",");
+            }
+
+            if (debouncedSearchQuery) {
+                params.search = debouncedSearchQuery;
+            }
+
+            const data = await filmsAPI.getFilms(params);
+
+            setTotal(data.total);
+            setHasMore(data.hasMore);
+
+            if (page === 0) {
+                setFilms(data.items);
+            } else {
+                setFilms((prevFilms) => [...prevFilms, ...data.items]);
+            }
+
             setError(null);
         } catch (err) {
+            console.error("Failed to load films:", err);
             setError("Не удалось загрузить фильмы");
         } finally {
-            setLoading(false);
+            isFirstLoad.current = false;
+            setInitialLoading(false);
+            setSearching(false);
+            setLoadingMore(false);
         }
-    };
+    }, [page, debouncedSearchQuery, selectedGenreIds]);
 
     const handleOpenDialog = (film = null) => {
         setEditingFilm(film);
@@ -178,6 +279,10 @@ const FilmsManage = () => {
                 film = await filmsAPI.createFilm(filmData);
             }
 
+            // After creating/updating, refresh the film list starting from first page
+            setPage(0);
+            setHasMore(true);
+            isFirstLoad.current = false;
             await loadFilms();
             handleCloseDialog();
         } catch (err) {
@@ -193,6 +298,10 @@ const FilmsManage = () => {
         if (window.confirm("Удалить фильм?")) {
             try {
                 await filmsAPI.deleteFilm(id);
+                // After deletion, refresh the film list starting from first page
+                setPage(0);
+                setHasMore(true);
+                isFirstLoad.current = false;
                 await loadFilms();
             } catch (err) {
                 setError("Не удалось удалить фильм");
@@ -200,9 +309,39 @@ const FilmsManage = () => {
         }
     };
 
-    if (loading) {
+
+    const resetFilters = () => {
+        setSelectedGenreIds([]);
+        setSearchQuery("");
+    };
+
+    const hasActiveFilters = selectedGenreIds.length > 0 || searchQuery !== "";
+
+    // Полноэкранная загрузка ТОЛЬКО при первом рендере
+    if (initialLoading) {
         return <Loading message="Загрузка фильмов..." />;
     }
+
+    const handleGenreChange = (event) => {
+        const {
+            target: { value },
+        } = event;
+        setSelectedGenreIds(
+            typeof value === "string" ? value.split(",") : value
+        );
+    };
+
+    const handleChipClick = (genreId) => {
+        if (selectedGenreIds.includes(genreId)) {
+            setSelectedGenreIds((prev) => prev.filter((id) => id !== genreId));
+        } else {
+            setSelectedGenreIds((prev) => [...prev, genreId]);
+        }
+    };
+
+    const selectedGenres = genres.filter((genre) =>
+        selectedGenreIds.includes(genre.id.toString())
+    );
 
     return (
         <Container
@@ -251,86 +390,408 @@ const FilmsManage = () => {
                 </Alert>
             )}
 
-            <Grid
-                container
-                spacing={3}
+            {/* Фильтры */}
+            <Paper
+                elevation={0}
+                sx={{
+                    p: 3,
+                    mb: 4,
+                    background:
+                        "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+                    border: "1px solid rgba(229, 9, 20, 0.2)",
+                    borderRadius: 2,
+                }}
             >
-                {films.map((film) => (
+                <Grid
+                    container
+                    spacing={3}
+                    alignItems="center"
+                >
                     <Grid
                         item
                         xs={12}
-                        sm={6}
-                        md={4}
-                        lg={3}
-                        key={film.id}
+                        md={hasActiveFilters ? 5 : 6}
                     >
-                        <Card
-                            sx={{
-                                height: "100%",
-                                background:
-                                    "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
-                                border: "1px solid rgba(229, 9, 20, 0.2)",
+                        <TextField
+                            fullWidth
+                            label="Поиск фильмов"
+                            variant="outlined"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Введите название фильма..."
+                            InputProps={{
+                                // Индикатор поиска прямо в поле ввода
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        {searching ? (
+                                            <CircularProgress
+                                                size={20}
+                                                sx={{ color: "#e50914" }}
+                                            />
+                                        ) : (
+                                            <SearchIcon
+                                                sx={{
+                                                    color: "text.secondary",
+                                                }}
+                                            />
+                                        )}
+                                    </InputAdornment>
+                                ),
                             }}
-                        >
-                            <CardMedia
-                                component="img"
-                                height="300"
-                                image={
-                                    film.poster_url ||
-                                    "https://via.placeholder.com/300x450/1f1f1f/ffffff?text=No+Poster"
-                                }
-                                alt={film.title}
-                            />
-                            <CardContent>
-                                <Typography
-                                    variant="h6"
-                                    sx={{ fontWeight: 600, mb: 1 }}
-                                >
-                                    {film.title}
-                                </Typography>
-                                <Typography
-                                    variant="body2"
-                                    color="text.secondary"
-                                    sx={{ mb: 2 }}
-                                >
-                                    {film.genres &&
-                                    Array.isArray(film.genres) &&
-                                    film.genres.length > 0
-                                        ? film.genres
-                                              .map((g) => g.name)
-                                              .join(", ")
-                                        : film.genre || "Без жанра"}{" "}
-                                    • {film.duration_minutes || film.duration} мин{" "}
-                                    • {film.release_year || "Год не указан"}
-                                </Typography>
-                                <Typography
-                                    variant="body2"
-                                    color="text.secondary"
-                                    sx={{ mb: 1, fontSize: '0.8rem' }}
-                                >
-                                    {film.country || "Страна не указана"}
-                                </Typography>
-                                <Box sx={{ display: "flex", gap: 1 }}>
-                                    <IconButton
-                                        onClick={() => handleOpenDialog(film)}
-                                        color="primary"
-                                        size="small"
-                                    >
-                                        <EditIcon />
-                                    </IconButton>
-                                    <IconButton
-                                        onClick={() => handleDelete(film.id)}
-                                        color="error"
-                                        size="small"
-                                    >
-                                        <DeleteIcon />
-                                    </IconButton>
-                                </Box>
-                            </CardContent>
-                        </Card>
+                        />
                     </Grid>
-                ))}
-            </Grid>
+                    <Grid
+                        item
+                        xs={12}
+                        md={hasActiveFilters ? 5 : 6}
+                    >
+                        <FormControl
+                            fullWidth
+                            variant="outlined"
+                        >
+                            <InputLabel id="genre-select-label">
+                                Жанры
+                            </InputLabel>
+                            <Select
+                                labelId="genre-select-label"
+                                id="genre-select"
+                                multiple
+                                value={selectedGenreIds}
+                                onChange={handleGenreChange}
+                                input={<OutlinedInput label="Жанры" />}
+                                MenuProps={MenuProps}
+                                renderValue={(selected) => {
+                                    if (selected.length === 0)
+                                        return "Все жанры";
+                                    if (selected.length === 1) {
+                                        const genre = genres.find(
+                                            (g) =>
+                                                g.id.toString() ===
+                                                selected[0]
+                                        );
+                                        return genre ? genre.name : "";
+                                    }
+                                    return `${selected.length} жанров выбрано`;
+                                }}
+                            >
+                                {genres.map((genre) => (
+                                    <MenuItem
+                                        key={genre.id}
+                                        value={genre.id.toString()}
+                                    >
+                                        <ListItemIcon>
+                                            <Checkbox
+                                                edge="start"
+                                                checked={
+                                                    selectedGenreIds.indexOf(
+                                                        genre.id.toString()
+                                                    ) !== -1
+                                                }
+                                                disableRipple
+                                            />
+                                        </ListItemIcon>
+                                        <ListItemText
+                                            primary={genre.name}
+                                        />
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </Grid>
+                    {hasActiveFilters && (
+                        <Grid
+                            item
+                            xs={12}
+                            md={2}
+                        >
+                            <Button
+                                fullWidth
+                                variant="outlined"
+                                onClick={resetFilters}
+                                startIcon={<ClearIcon />}
+                                sx={{
+                                    borderColor: "#e50914",
+                                    color: "#e50914",
+                                    height: "56px",
+                                    fontWeight: 600,
+                                    "&:hover": {
+                                        borderColor: "#ff1a1a",
+                                        background: "rgba(229, 9, 20, 0.1)",
+                                    },
+                                }}
+                            >
+                                Сбросить
+                            </Button>
+                        </Grid>
+                    )}
+                </Grid>
+
+                {/* Чипы жанров */}
+                <Box
+                    sx={{
+                        mt: 2,
+                        display: "flex",
+                        gap: 1,
+                        flexWrap: "wrap",
+                    }}
+                >
+                    {genres.map((genre) => (
+                        <Chip
+                            key={genre.id}
+                            label={genre.name}
+                            onClick={() =>
+                                handleChipClick(genre.id.toString())
+                            }
+                            variant={
+                                selectedGenreIds.includes(
+                                    genre.id.toString()
+                                )
+                                    ? "filled"
+                                    : "outlined"
+                            }
+                            sx={{
+                                background: selectedGenreIds.includes(
+                                    genre.id.toString()
+                                )
+                                    ? "linear-gradient(135deg, #e50914 0%, #b00710 100%)"
+                                    : "transparent",
+                                borderColor: "#e50914",
+                                color: selectedGenreIds.includes(
+                                    genre.id.toString()
+                                )
+                                    ? "#fff"
+                                    : "#e50914",
+                                fontWeight: 600,
+                                "&:hover": {
+                                    background: selectedGenreIds.includes(
+                                        genre.id.toString()
+                                    )
+                                        ? "linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)"
+                                        : "rgba(229, 9, 20, 0.1)",
+                                },
+                            }}
+                        />
+                    ))}
+                </Box>
+            </Paper>
+
+            {/* Заголовок с индикатором поиска */}
+            <Box
+                sx={{
+                    mb: 3,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 2,
+                }}
+            >
+                <Box>
+                    <Typography
+                        variant="h5"
+                        sx={{ fontWeight: 600, mb: 1 }}
+                    >
+                        {selectedGenreIds.length === 0
+                            ? "Фильмы"
+                            : `Фильмы (${selectedGenres.map((g) => g.name).join(", ")})`}
+                    </Typography>
+                    <Typography
+                        variant="body2"
+                        color="text.secondary"
+                    >
+                        Найдено фильмов: {total}
+                    </Typography>
+                </Box>
+                {/* Показываем спиннер рядом с заголовком при поиске */}
+                {searching && (
+                    <CircularProgress
+                        size={24}
+                        sx={{ color: "#e50914" }}
+                    />
+                )}
+            </Box>
+
+            {/* Список фильмов - показываем с opacity при поиске */}
+            <Box
+                sx={{
+                    opacity: searching ? 0.6 : 1,
+                    transition: "opacity 0.2s ease",
+                    pointerEvents: searching ? "none" : "auto",
+                }}
+            >
+                <Grid
+                    container
+                    spacing={3}
+                >
+                    {films.map((film, index) => {
+                        if (films.length === index + 1) {
+                            return (
+                                <Grid
+                                    item
+                                    xs={12}
+                                    sm={6}
+                                    md={4}
+                                    lg={3}
+                                    key={film.id}
+                                    ref={lastFilmRef}
+                                >
+                                    <Card
+                                        sx={{
+                                            height: "100%",
+                                            background:
+                                                "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+                                            border: "1px solid rgba(229, 9, 20, 0.2)",
+                                        }}
+                                    >
+                                        <CardMedia
+                                            component="img"
+                                            height="300"
+                                            image={
+                                                film.poster_url ||
+                                                "https://via.placeholder.com/300x450/1f1f1f/ffffff?text=No+Poster"
+                                            }
+                                            alt={film.title}
+                                        />
+                                        <CardContent>
+                                            <Typography
+                                                variant="h6"
+                                                sx={{ fontWeight: 600, mb: 1 }}
+                                            >
+                                                {film.title}
+                                            </Typography>
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
+                                                sx={{ mb: 2 }}
+                                            >
+                                                {film.genres &&
+                                                Array.isArray(film.genres) &&
+                                                film.genres.length > 0
+                                                    ? film.genres
+                                                          .map((g) => g.name)
+                                                          .join(", ")
+                                                    : film.genre || "Без жанра"}{" "}
+                                                • {film.duration_minutes || film.duration} мин{" "}
+                                                • {film.release_year || "Год не указан"}
+                                            </Typography>
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
+                                                sx={{ mb: 1, fontSize: '0.8rem' }}
+                                            >
+                                                {film.country || "Страна не указана"}
+                                            </Typography>
+                                            <Box sx={{ display: "flex", gap: 1 }}>
+                                                <IconButton
+                                                    onClick={() => handleOpenDialog(film)}
+                                                    color="primary"
+                                                    size="small"
+                                                >
+                                                    <EditIcon />
+                                                </IconButton>
+                                                <IconButton
+                                                    onClick={() => handleDelete(film.id)}
+                                                    color="error"
+                                                    size="small"
+                                                >
+                                                    <DeleteIcon />
+                                                </IconButton>
+                                            </Box>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            );
+                        }
+                        return (
+                            <Grid
+                                item
+                                xs={12}
+                                sm={6}
+                                md={4}
+                                lg={3}
+                                key={film.id}
+                            >
+                                <Card
+                                    sx={{
+                                        height: "100%",
+                                        background:
+                                            "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+                                        border: "1px solid rgba(229, 9, 20, 0.2)",
+                                    }}
+                                >
+                                    <CardMedia
+                                        component="img"
+                                        height="300"
+                                        image={
+                                            film.poster_url ||
+                                            "https://via.placeholder.com/300x450/1f1f1f/ffffff?text=No+Poster"
+                                        }
+                                        alt={film.title}
+                                    />
+                                    <CardContent>
+                                        <Typography
+                                            variant="h6"
+                                            sx={{ fontWeight: 600, mb: 1 }}
+                                        >
+                                            {film.title}
+                                        </Typography>
+                                        <Typography
+                                            variant="body2"
+                                            color="text.secondary"
+                                            sx={{ mb: 2 }}
+                                        >
+                                            {film.genres &&
+                                            Array.isArray(film.genres) &&
+                                            film.genres.length > 0
+                                                ? film.genres
+                                                      .map((g) => g.name)
+                                                      .join(", ")
+                                                : film.genre || "Без жанра"}{" "}
+                                            • {film.duration_minutes || film.duration} мин{" "}
+                                            • {film.release_year || "Год не указан"}
+                                        </Typography>
+                                        <Typography
+                                            variant="body2"
+                                            color="text.secondary"
+                                            sx={{ mb: 1, fontSize: '0.8rem' }}
+                                        >
+                                            {film.country || "Страна не указана"}
+                                        </Typography>
+                                        <Box sx={{ display: "flex", gap: 1 }}>
+                                            <IconButton
+                                                onClick={() => handleOpenDialog(film)}
+                                                color="primary"
+                                                size="small"
+                                            >
+                                                <EditIcon />
+                                            </IconButton>
+                                            <IconButton
+                                                onClick={() => handleDelete(film.id)}
+                                                color="error"
+                                                size="small"
+                                            >
+                                                <DeleteIcon />
+                                            </IconButton>
+                                        </Box>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                        );
+                    })}
+                </Grid>
+            </Box>
+
+            {loadingMore && (
+                <Box
+                    sx={{
+                        display: "flex",
+                        justifyContent: "center",
+                        my: 4,
+                    }}
+                >
+                    <CircularProgress
+                        sx={{ color: "#e50914" }}
+                    />
+                </Box>
+            )}
 
             {/* Dialog */}
             <Dialog

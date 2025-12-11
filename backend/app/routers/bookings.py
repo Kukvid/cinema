@@ -142,6 +142,35 @@ async def create_booking(
         # Increment usage count (will be committed later with the order)
         await increment_usage(db, promocode)
 
+    # Add concession items to the total amount before applying bonuses
+    # This ensures bonus calculations include the full order amount
+    if booking_data.concession_preorders:
+        for preorder_data in booking_data.concession_preorders:
+            # Validate concession item exists
+            concession_item_result = await db.execute(
+                select(ConcessionItem)
+                .filter(ConcessionItem.id == preorder_data.concession_item_id)
+            )
+            concession_item = concession_item_result.scalar_one_or_none()
+
+            if not concession_item:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Товар из кинобара с id {preorder_data.concession_item_id} не найден"
+                )
+
+            if concession_item.stock_quantity < preorder_data.quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Недостаточно товара {preorder_data.concession_item_id} на складе. Доступно: {concession_item.stock_quantity}"
+                )
+
+            # Calculate total price for this concession item
+            total_price = Decimal(str(preorder_data.unit_price)) * Decimal(str(preorder_data.quantity))
+
+            # Add to the total amount (this includes both tickets and concession items)
+            total_amount += total_price
+
     # Apply bonus points if requested
     bonus_deduction = Decimal("0.00")
     if booking_data.use_bonus_points and booking_data.use_bonus_points > 0:
@@ -164,7 +193,7 @@ async def create_booking(
 
         bonus_deduction = booking_data.use_bonus_points
 
-        # Check bonus deduction limits
+        # Check bonus deduction limits - using the full order amount (tickets + concessions)
         settings = get_settings()
         max_bonus_amount = (total_amount - discount_amount) * Decimal(settings.BONUS_MAX_PERCENTAGE) / Decimal("100")
 
@@ -241,34 +270,12 @@ async def create_booking(
         db.add(new_ticket)
         created_tickets.append(new_ticket)
 
-    # Add concession items to the total amount and process preorders
+    # Process concession preorders separately (after order is created)
     created_concession_preorders = []
     if booking_data.concession_preorders:
         for preorder_data in booking_data.concession_preorders:
-            # Validate concession item exists
-            concession_item_result = await db.execute(
-                select(ConcessionItem)
-                .filter(ConcessionItem.id == preorder_data.concession_item_id)
-            )
-            concession_item = concession_item_result.scalar_one_or_none()
-
-            if not concession_item:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Товар из кинобара с id {preorder_data.concession_item_id} не найден"
-                )
-
-            if concession_item.stock_quantity < preorder_data.quantity:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Недостаточно товара {preorder_data.concession_item_id} на складе. Доступно: {concession_item.stock_quantity}"
-                )
-
-            # Calculate total price
+            # Calculate total price for this concession item
             total_price = Decimal(str(preorder_data.unit_price)) * Decimal(str(preorder_data.quantity))
-
-            # Add to the order's total amount (this includes both tickets and concession items)
-            total_amount += total_price
 
             # Create preorder
             new_preorder = ConcessionPreorder(
@@ -281,15 +288,15 @@ async def create_booking(
             )
 
             # Update stock
+            concession_item_result = await db.execute(
+                select(ConcessionItem)
+                .filter(ConcessionItem.id == preorder_data.concession_item_id)
+            )
+            concession_item = concession_item_result.scalar_one_or_none()
             concession_item.stock_quantity -= preorder_data.quantity
 
             db.add(new_preorder)
             created_concession_preorders.append(new_preorder)
-
-    # Recalculate final amount with the updated total_amount that now includes concession items
-    final_amount = total_amount - discount_amount - bonus_deduction
-    new_order.total_amount = total_amount
-    new_order.final_amount = final_amount
 
     await db.commit()
     await db.refresh(new_order)

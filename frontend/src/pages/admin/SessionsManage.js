@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { addMinutes } from "date-fns";
 import {
     Container,
     Typography,
@@ -43,6 +44,7 @@ const SessionsManage = () => {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingSession, setEditingSession] = useState(null);
     const [formLoading, setFormLoading] = useState(false);
+    const [endDateTime, setEndDateTime] = useState("");
 
     const {
         register,
@@ -53,6 +55,8 @@ const SessionsManage = () => {
     } = useForm();
 
     const selectedCinemaId = watch("cinema_id");
+    const selectedFilmId = watch("film_id");
+    const startDateTime = watch("start_datetime");
 
     useEffect(() => {
         loadData();
@@ -63,6 +67,20 @@ const SessionsManage = () => {
             loadHalls(selectedCinemaId);
         }
     }, [selectedCinemaId]);
+
+    // Calculate end datetime when start datetime or selected film changes
+    useEffect(() => {
+        if (startDateTime && selectedFilmId) {
+            const selectedFilm = films.find(film => film.id === parseInt(selectedFilmId));
+            if (selectedFilm && selectedFilm.duration_minutes) {
+                const startDate = new Date(startDateTime);
+                const endDate = addMinutes(startDate, selectedFilm.duration_minutes);
+                // Format to datetime-local input format (YYYY-MM-DDTHH:mm)
+                const formattedEndDate = endDate.toISOString().slice(0, 16);
+                setEndDateTime(formattedEndDate);
+            }
+        }
+    }, [startDateTime, selectedFilmId, films]);
 
     const loadData = async () => {
         try {
@@ -102,6 +120,13 @@ const SessionsManage = () => {
                 start_datetime: session.start_datetime?.split(".")[0],
                 base_price: session.base_price,
             });
+            // Calculate end datetime for editing
+            if (session.start_datetime && session.film?.duration_minutes) {
+                const startDate = new Date(session.start_datetime.split(".")[0]);
+                const endDate = addMinutes(startDate, session.film.duration_minutes);
+                const formattedEndDate = endDate.toISOString().slice(0, 16);
+                setEndDateTime(formattedEndDate);
+            }
             if (session.hall?.cinema_id) {
                 loadHalls(session.hall.cinema_id);
             }
@@ -113,6 +138,7 @@ const SessionsManage = () => {
                 start_datetime: "",
                 base_price: 300,
             });
+            setEndDateTime("");
         }
         setDialogOpen(true);
     };
@@ -383,6 +409,19 @@ const SessionsManage = () => {
                             })}
                             error={!!errors.start_datetime}
                             helperText={errors.start_datetime?.message}
+                        />
+
+                        <TextField
+                            fullWidth
+                            label="Время окончания"
+                            type="datetime-local"
+                            margin="normal"
+                            InputLabelProps={{ shrink: true }}
+                            value={endDateTime}
+                            InputProps={{
+                                readOnly: true, // Make it read-only since it's calculated automatically
+                            }}
+                            disabled // Disable editing since it's auto-calculated
                         />
 
                         <TextField
