@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+import logging
 
 from app.database import get_db
 from app.models.rental_contract import RentalContract
@@ -16,6 +17,8 @@ from app.schemas.contract import RentalContractCreate, RentalContractUpdate, Ren
 from app.schemas.payment_history import PaymentHistoryResponse
 from app.schemas.cinema import CinemaResponse
 from app.routers.auth import get_current_active_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -170,7 +173,7 @@ async def create_contract(
                 RentalContract.distributor_id == contract_data.distributor_id,
                 RentalContract.film_id == contract_data.film_id,
                 RentalContract.cinema_id == contract_data.cinema_id,
-                RentalContract.status.in_([ContractStatus.ACTIVE, ContractStatus.PENDING]),
+                RentalContract.status.in_([ContractStatus.ACTIVE]),
                 RentalContract.rental_start_date <= contract_data.rental_end_date,
                 RentalContract.rental_end_date >= contract_data.rental_start_date
             )
@@ -355,6 +358,12 @@ async def mark_payment_as_paid(
     moscow_tz = pytz.timezone('Europe/Moscow')
     payment.payment_date = datetime.now(moscow_tz).date()
 
+    # Generate document number if not already set
+    if not payment.payment_document_number:
+        import random
+        current_time = datetime.now(moscow_tz)
+        payment.payment_document_number = f"PAY_{payment.rental_contract_id}_{int(current_time.timestamp())}_{random.randint(1000, 9999)}"
+
     # If all payments for this contract are now paid, change contract status to PAID
     remaining_payments_result = await db.execute(
         select(PaymentHistory)
@@ -375,6 +384,155 @@ async def mark_payment_as_paid(
     await db.refresh(payment)
 
     return payment
+
+
+@router.post("/{contract_id}/payments", response_model=PaymentHistoryResponse)
+async def create_contract_payment(
+    contract_id: int,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a payment for a rental contract by calculating revenue and applying distributor percentage."""
+    # Verify user has proper permissions
+    if current_user.role.name not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin and super admin users can create contract payments"
+        )
+
+    # Verify contract exists
+    contract_result = await db.execute(select(RentalContract).filter(RentalContract.id == contract_id))
+    contract = contract_result.scalar_one_or_none()
+
+    if not contract:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Rental contract with id {contract_id} not found"
+        )
+
+    # Verify admin permissions - admin can only create payments for their cinema's contracts
+    if current_user.role.name == "admin":
+        if not current_user.cinema_id or current_user.cinema_id != contract.cinema_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin can only create payments for contracts related to their cinema"
+            )
+
+    import random
+    from app.models.session import Session
+    from app.models.ticket import Ticket
+    from app.models.order import Order
+    from app.models.film import Film
+    from app.models.enums import OrderStatus as OrderStatusEnum
+    from sqlalchemy import and_
+
+    # Calculate revenue from sessions and tickets for the contract period
+    # Get sessions for the film during the rental period
+    sessions_result = await db.execute(
+        select(Session)
+        .join(Film, Session.film_id == Film.id)
+        .filter(
+            and_(
+                Film.id == contract.film_id,
+                Session.start_datetime >= contract.rental_start_date,
+                Session.start_datetime <= contract.rental_end_date,
+                Session.cinema_id == contract.cinema_id  # Ensure sessions are for the same cinema
+            )
+        )
+    )
+    contract_sessions = sessions_result.scalars().all()
+
+    session_ids = [session.id for session in contract_sessions]
+    if not session_ids:
+        logger.info(f"No sessions found for contract {contract_id} during rental period, setting revenue to 0")
+        total_revenue = 0.0
+    else:
+        # Get tickets for these sessions that were paid during the contract period
+        tickets_result = await db.execute(
+            select(Ticket)
+            .join(Order, Ticket.order_id == Order.id)
+            .filter(
+                and_(
+                    Ticket.session_id.in_(session_ids),
+                    Order.status == OrderStatusEnum.paid,
+                    # Include all tickets for paid orders, regardless of purchase date,
+                    # to capture full revenue for the contract period
+                )
+            )
+        )
+        contract_tickets = tickets_result.scalars().all()
+
+        # Calculate total revenue from tickets
+        total_revenue = sum(float(ticket.price) for ticket in contract_tickets)
+
+        logger.info(f"Found {len(contract_tickets)} tickets for contract {contract_id}, total revenue: {total_revenue}")
+
+    # Calculate distributor's share (percentage of total revenue)
+    distributor_share = total_revenue * float(contract.distributor_percentage) / 100
+
+    import pytz
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    current_time = datetime.now(moscow_tz)
+
+    # Create payment history record
+    new_payment = PaymentHistory(
+        rental_contract_id=contract.id,
+        calculated_amount=distributor_share,
+        calculation_date=current_time,
+        payment_status=PaymentStatus.PENDING,
+        payment_date=None,  # Initially no payment date until paid
+        payment_document_number=f"PAY_{contract_id}_{int(current_time.timestamp())}_{random.randint(1000, 9999)}"  # Generate document number
+    )
+
+    db.add(new_payment)
+    await db.commit()
+    await db.refresh(new_payment)
+
+    # Log the calculated revenue to the log file
+    log_message = f"Payment created for contract {contract_id}. Total revenue: {total_revenue}, Distributor share ({contract.distributor_percentage}%): {distributor_share}\n"
+
+    # Write to the log file using relative path from the backend directory
+    with open("../../http_requests.log", "a", encoding="utf-8") as log_file:
+        log_file.write(log_message)
+
+    return new_payment
+
+
+@router.get("/payments/all", response_model=List[PaymentHistoryResponse])
+async def get_all_payments(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    cinema_id: Optional[int] = Query(None, description="Filter by cinema ID for admin users"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all payments (all statuses) with optional cinema filter for admin users."""
+    # Verify user has proper permissions
+    if current_user.role.name not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin and super admin users can access payments"
+        )
+
+    query = (
+        select(PaymentHistory)
+        .join(RentalContract, PaymentHistory.rental_contract_id == RentalContract.id)
+        .order_by(PaymentHistory.calculation_date.desc())
+    )
+
+    # For admin users, only show payments related to their cinema
+    if current_user.role.name == "admin" and cinema_id:
+        # Admin can only see payments for contracts related to their cinema
+        query = query.filter(RentalContract.cinema_id == cinema_id)
+    elif current_user.role.name == "admin" and not cinema_id:
+        # If no cinema ID provided, use admin's assigned cinema
+        if current_user.cinema_id:
+            query = query.filter(RentalContract.cinema_id == current_user.cinema_id)
+    # For super admin users, show all payments
+    # No filter is applied for super_admin, they see all payments
+
+    result = await db.execute(query)
+    payments = result.scalars().all()
+
+    return payments
 
 
 @router.get("/payments/pending", response_model=List[PaymentHistoryResponse])
@@ -463,6 +621,12 @@ async def pay_contract_payment(
     import pytz
     moscow_tz = pytz.timezone('Europe/Moscow')
     payment.payment_date = datetime.now(moscow_tz).date()
+
+    # Generate document number if not already set
+    if not payment.payment_document_number:
+        import random
+        current_time = datetime.now(moscow_tz)
+        payment.payment_document_number = f"PAY_{payment.rental_contract_id}_{int(current_time.timestamp())}_{random.randint(1000, 9999)}"
 
     # Check if all payments for this contract are now paid
     remaining_payments_result = await db.execute(

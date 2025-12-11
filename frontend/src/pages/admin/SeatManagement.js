@@ -371,7 +371,6 @@ const SeatManagement = () => {
                   name="hall_id"
                   value={formData.hall_id}
                   onChange={handleInputChange}
-                  disabled={!!editingSeat} // Disable hall selection when editing existing seat
                 >
                   {halls.map((hall) => (
                     <MenuItem key={hall.id} value={hall.id}>

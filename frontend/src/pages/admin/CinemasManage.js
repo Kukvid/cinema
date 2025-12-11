@@ -18,6 +18,10 @@ import {
   DialogActions,
   TextField,
   Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -66,7 +70,7 @@ const CinemasManage = () => {
     if (cinema) {
       reset(cinema);
     } else {
-      reset({ name: '', address: '', phone: '' });
+      reset({ name: '', address: '', city: '', phone: '', latitude: '', longitude: '', opening_date: '' });
     }
     setDialogOpen(true);
   };
@@ -148,6 +152,7 @@ const CinemasManage = () => {
           <TableHead>
             <TableRow sx={{ background: 'rgba(229, 9, 20, 0.1)' }}>
               <TableCell sx={{ fontWeight: 600 }}>Название</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Город</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>Адрес</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>Телефон</TableCell>
               <TableCell align="right" sx={{ fontWeight: 600 }}>Действия</TableCell>
@@ -162,6 +167,7 @@ const CinemasManage = () => {
                     {cinema.name}
                   </Box>
                 </TableCell>
+                <TableCell>{cinema.city}</TableCell>
                 <TableCell>{cinema.address}</TableCell>
                 <TableCell>{cinema.phone}</TableCell>
                 <TableCell align="right">
@@ -195,6 +201,14 @@ const CinemasManage = () => {
             />
             <TextField
               fullWidth
+              label="Город"
+              margin="normal"
+              {...register('city', { required: 'Город обязателен' })}
+              error={!!errors.city}
+              helperText={errors.city?.message}
+            />
+            <TextField
+              fullWidth
               label="Адрес"
               margin="normal"
               {...register('address', { required: 'Адрес обязателен' })}
@@ -207,6 +221,51 @@ const CinemasManage = () => {
               margin="normal"
               {...register('phone')}
             />
+            <TextField
+              fullWidth
+              label="Широта"
+              margin="normal"
+              type="number"
+              {...register('latitude', {
+                setValueAs: (value) => value === "" ? null : parseFloat(value),
+                validate: (value) => value === null || (value >= -90 && value <= 90) || 'Широта должна быть от -90 до 90'
+              })}
+              error={!!errors.latitude}
+              helperText={errors.latitude?.message}
+            />
+            <TextField
+              fullWidth
+              label="Долгота"
+              margin="normal"
+              type="number"
+              {...register('longitude', {
+                setValueAs: (value) => value === "" ? null : parseFloat(value),
+                validate: (value) => value === null || (value >= -180 && value <= 180) || 'Долгота должна быть от -180 до 180'
+              })}
+              error={!!errors.longitude}
+              helperText={errors.longitude?.message}
+            />
+            <TextField
+              fullWidth
+              label="Дата открытия"
+              margin="normal"
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              {...register('opening_date', {required : "Дата открытия обязательна"})}
+              //               {...register('address', { required: 'Адрес обязателен' })}
+
+            />
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Статус</InputLabel>
+              <Select
+                label="Статус"
+                {...register('status', {required : "Статус обязателен"})}
+              >
+                <MenuItem value="ACTIVE">Активный</MenuItem>
+                <MenuItem value="INACTIVE">Неактивный</MenuItem>
+                <MenuItem value="CLOSED">Закрыт</MenuItem>
+              </Select>
+            </FormControl>
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseDialog}>Отмена</Button>

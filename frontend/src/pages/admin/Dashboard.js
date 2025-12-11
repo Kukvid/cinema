@@ -56,34 +56,34 @@ const Dashboard = () => {
                     value: statsData.total_users?.toLocaleString() || "0",
                     icon: <PeopleIcon sx={{ fontSize: 40 }} />,
                     color: "#2196f3",
-                    trend: "", // Dynamic trend would require historical data
+                    // trend: "", // Dynamic trend would require historical data
                 },
                 {
                     title: "Активные фильмы",
                     value: statsData.active_films?.toLocaleString() || "0",
                     icon: <MovieIcon sx={{ fontSize: 40 }} />,
                     color: "#e50914",
-                    trend: "", // Dynamic trend would require historical data
+                    // trend: "", // Dynamic trend would require historical data
                 },
                 {
                     title: "Сеансы сегодня",
                     value: statsData.today_sessions?.toLocaleString() || "0",
                     icon: <EventIcon sx={{ fontSize: 40 }} />,
                     color: "#ffd700",
-                    trend: "", // Dynamic trend would require historical data
+                    // trend: "", // Dynamic trend would require historical data
                 },
                 {
                     title: "Выручка (месяц)",
                     value: `₽${parseFloat(statsData.monthly_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                     icon: <CurrencyRuble sx={{ fontSize: 40 }} />,
                     color: "#46d369",
-                    trend: "", // Dynamic trend would require historical data
+                    // trend: "", // Dynamic trend would require historical data
                 },
             ];
 
             setDashboardStats(formattedStats);
         } catch (err) {
-            console.error('Error loading dashboard stats:', err);
+            console.error("Error loading dashboard stats:", err);
             // Use fallback stats if API call fails
             const fallbackStats = [
                 {
@@ -201,7 +201,8 @@ const Dashboard = () => {
             title: "Управление платежами по контрактам",
             icon: <MoneyIcon />,
             path: "/admin/contract-payments",
-            description: "Оплата и управление платежами за контракты с дистрибьюторами",
+            description:
+                "Оплата и управление платежами за контракты с дистрибьюторами",
             restrictedForStaff: true,
         },
         {
@@ -240,6 +241,16 @@ const Dashboard = () => {
     if (isStaff) {
         // Показываем только 'Кинобар' и 'Категории кинобара' для staff
         menuItems = allMenuItems.filter((item) => item.title === "Кинобар");
+    } else if (isAdmin) {
+        menuItems = allMenuItems.filter(
+            (item) =>
+                item.title !== "Управление пользователями" &&
+                item.title !== "Промокоды" &&
+                item.title !== "Управление кинотеатрами"
+        );
+    } else if (isSuperAdmin) {
+        // Super admin видит всё
+        menuItems = allMenuItems;
     }
 
     return (

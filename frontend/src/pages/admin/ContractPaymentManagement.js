@@ -26,7 +26,7 @@ import { cinemasAPI } from '../../api/cinemas';
 
 const ContractPaymentManagement = () => {
   const { user } = useAuth();
-  const [pendingPayments, setPendingPayments] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [cinemas, setCinemas] = useState([]);
@@ -35,7 +35,7 @@ const ContractPaymentManagement = () => {
 
   useEffect(() => {
     loadCinemas();
-    loadPendingPayments();
+    loadPayments();
   }, [cinemaFilter]);
 
   const loadCinemas = async () => {
@@ -55,7 +55,7 @@ const ContractPaymentManagement = () => {
     }
   };
 
-  const loadPendingPayments = async () => {
+  const loadPayments = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -63,21 +63,21 @@ const ContractPaymentManagement = () => {
       let paymentsData;
       if (user.role === 'super_admin' && cinemaFilter) {
         // Super admin with cinema filter
-        paymentsData = await contractsAPI.getPendingPayments(cinemaFilter);
+        paymentsData = await contractsAPI.getAllPayments(cinemaFilter);
       } else if (user.role === 'admin') {
         // Admin users see only their cinema's payments
-        paymentsData = await contractsAPI.getPendingPayments(selectedCinema);
+        paymentsData = await contractsAPI.getAllPayments(selectedCinema);
       } else if (user.role === 'super_admin') {
         // Super admin without filter sees all payments
-        paymentsData = await contractsAPI.getPendingPayments();
+        paymentsData = await contractsAPI.getAllPayments();
       } else {
         // Other roles shouldn't be here due to route protection
         paymentsData = [];
       }
 
-      setPendingPayments(paymentsData);
+      setPayments(paymentsData);
     } catch (err) {
-      console.error('Error loading pending payments:', err);
+      console.error('Error loading payments:', err);
       setError('Ошибка при загрузке данных о платежах');
     } finally {
       setLoading(false);
@@ -88,7 +88,7 @@ const ContractPaymentManagement = () => {
     try {
       await contractsAPI.payContractPayment(paymentId);
       // Reload payments after successful payment
-      loadPendingPayments();
+      loadPayments();
     } catch (err) {
       console.error('Error paying payment:', err);
       setError('Ошибка при оплате. Пожалуйста, попробуйте снова.');
@@ -205,21 +205,23 @@ const ContractPaymentManagement = () => {
                   <TableCell>Кинотеатр</TableCell>
                   <TableCell>Сумма</TableCell>
                   <TableCell>Дата расчета</TableCell>
+                  <TableCell>Дата оплаты</TableCell>
+                  <TableCell>Документ оплаты</TableCell>
                   <TableCell>Статус</TableCell>
                   <TableCell>Действия</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {pendingPayments.length === 0 ? (
+                {payments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                    <TableCell colSpan={11} align="center" sx={{ py: 4 }}>
                       <Typography variant="h6" color="text.secondary">
-                        Нет ожидающих платежей
+                        Нет платежей
                       </Typography>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  pendingPayments.map((payment) => (
+                  payments.map((payment) => (
                     <TableRow
                       key={payment.id}
                       sx={{
@@ -248,6 +250,8 @@ const ContractPaymentManagement = () => {
                         {formatCurrency(payment.calculated_amount)}
                       </TableCell>
                       <TableCell>{formatDate(payment.calculation_date)}</TableCell>
+                      <TableCell>{payment.payment_date ? formatDate(payment.payment_date) : '—'}</TableCell>
+                      <TableCell>{payment.payment_document_number || '—'}</TableCell>
                       <TableCell>
                         <Box
                           sx={{
@@ -265,7 +269,7 @@ const ContractPaymentManagement = () => {
                         </Box>
                       </TableCell>
                       <TableCell>
-                        {payment.payment_status === 'PENDING' && (
+                        {payment.payment_status === 'PENDING' ? (
                           <Button
                             variant="contained"
                             size="small"
@@ -279,6 +283,10 @@ const ContractPaymentManagement = () => {
                           >
                             Оплатить
                           </Button>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                            Оплачено
+                          </Typography>
                         )}
                       </TableCell>
                     </TableRow>

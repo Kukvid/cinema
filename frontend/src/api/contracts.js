@@ -61,4 +61,11 @@ export const contractsAPI = {
     const response = await axios.post(`/contracts/payments/${paymentId}/pay`);
     return response.data;
   },
+
+  // Get all payments (all statuses) with optional cinema filter
+  getAllPayments: async (cinemaId = null) => {
+    const params = cinemaId ? { cinema_id: cinemaId } : {};
+    const response = await axios.get('/contracts/payments/all', { params });
+    return response.data;
+  },
 };
