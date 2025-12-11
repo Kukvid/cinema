@@ -129,6 +129,7 @@ const HallManagement = () => {
 
   const handleSubmit = async () => {
     try {
+      // Prepare submit data without hall_number since it's now optional and backend will generate it if needed
       let submitData = {
         ...formData,
         capacity: parseInt(formData.capacity)
@@ -147,7 +148,8 @@ const HallManagement = () => {
       await loadData();
       handleCloseDialog();
     } catch (err) {
-      setError('Не удалось сохранить зал');
+      console.error('Error submitting hall:', err);
+      setError(err.response?.data?.detail || 'Не удалось сохранить зал');
     }
   };
 

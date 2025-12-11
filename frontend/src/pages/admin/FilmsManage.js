@@ -121,13 +121,25 @@ const FilmsManage = () => {
                 imdb_rating: film.imdb_rating,
                 kinopoisk_rating: film.kinopoisk_rating,
                 poster_url: film.poster_url || "",
+                original_title: film.original_title || "",
+                age_rating: film.age_rating || "",
+                release_year: film.release_year || "",
+                country: film.country || "",
+                director: film.director || "",
+                actors: film.actors || "",
             });
         } else {
             reset({
                 title: "",
+                original_title: "",
                 description: "",
-                genre_ids: [],
+                age_rating: "",
                 duration_minutes: 0,
+                release_year: "",
+                country: "",
+                director: "",
+                actors: "",
+                genre_ids: [],
                 imdb_rating: null,
                 kinopoisk_rating: null,
                 trailer_url: "",
@@ -288,7 +300,15 @@ const FilmsManage = () => {
                                               .map((g) => g.name)
                                               .join(", ")
                                         : film.genre || "Без жанра"}{" "}
-                                    • {film.duration} мин
+                                    • {film.duration_minutes || film.duration} мин{" "}
+                                    • {film.release_year || "Год не указан"}
+                                </Typography>
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                    sx={{ mb: 1, fontSize: '0.8rem' }}
+                                >
+                                    {film.country || "Страна не указана"}
                                 </Typography>
                                 <Box sx={{ display: "flex", gap: 1 }}>
                                     <IconButton
@@ -336,11 +356,59 @@ const FilmsManage = () => {
                         />
                         <TextField
                             fullWidth
+                            label="Оригинальное название"
+                            margin="normal"
+                            {...register("original_title")}
+                        />
+                        <TextField
+                            fullWidth
                             label="Описание"
                             margin="normal"
                             multiline
                             rows={3}
                             {...register("description")}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Возрастной рейтинг"
+                            margin="normal"
+                            {...register("age_rating")}
+                            helperText="Например: 0+, 6+, 12+, 16+, 18+"
+                        />
+                        <TextField
+                            fullWidth
+                            label="Длительность (мин)"
+                            margin="normal"
+                            type="number"
+                            {...register("duration_minutes")}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Год выпуска"
+                            margin="normal"
+                            type="number"
+                            inputProps={{ min: 1895, max: 2100 }}
+                            {...register("release_year")}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Страна"
+                            margin="normal"
+                            {...register("country")}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Режиссёр"
+                            margin="normal"
+                            {...register("director")}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Актеры"
+                            margin="normal"
+                            multiline
+                            rows={2}
+                            {...register("actors")}
                         />
                         <FormControl
                             fullWidth
@@ -410,13 +478,6 @@ const FilmsManage = () => {
                                 </Typography>
                             )}
                         </FormControl>
-                        <TextField
-                            fullWidth
-                            label="Длительность (мин)"
-                            margin="normal"
-                            type="number"
-                            {...register("duration_minutes")}
-                        />
                         <TextField
                             fullWidth
                             label="IMDB Рейтинг (0-10)"

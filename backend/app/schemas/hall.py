@@ -6,7 +6,7 @@ from app.models.enums import HallStatus, HallType
 
 # Base schema with common fields
 class HallBase(BaseModel):
-    hall_number: str = Field(..., min_length=1, max_length=10)
+    hall_number: Optional[str] = Field(None, min_length=1, max_length=10)
     name: Optional[str] = Field(None, max_length=100)
     capacity: int = Field(..., gt=0, description="Hall capacity must be positive")
     hall_type: HallType = HallType.STANDARD

@@ -8,9 +8,9 @@ class UserRoles(str, Enum):
     user = 'user'
 
 class CinemaStatus(str, Enum):
-    ACTIVE = "active"
-    CLOSED = "closed"
-    RENOVATION = "renovation"
+    ACTIVE = "ACTIVE"
+    CLOSED = "CLOSED"
+    RENOVATION = "RENOVATION"
 
 
 class HallStatus(str, Enum):
