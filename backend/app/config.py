@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     # Reports
     REPORTS_DIR: str = "reports"
 
+    # Rental Contract Tax
+    TAX_PERCENTAGE: float = 13.0
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

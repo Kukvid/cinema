@@ -7,6 +7,8 @@ from sqlalchemy.sql import func
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import logging
+import os
+from logging.handlers import RotatingFileHandler
 
 from app.config import settings
 from app.models.order import Order
@@ -25,6 +27,33 @@ from app.models.enums import SessionStatus, ContractStatus
 import pytz
 
 logger = logging.getLogger(__name__)
+
+# Set up specialized logger for rental contract calculations
+contract_calculations_logger = logging.getLogger("contract_calculations")
+contract_calculations_logger.setLevel(logging.INFO)
+
+# Create logs directory if it doesn't exist
+logs_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+os.makedirs(logs_dir, exist_ok=True)
+
+# Create file handler for contract calculations
+contract_calculations_handler = RotatingFileHandler(
+    os.path.join(logs_dir, "contract_calculations.log"),
+    maxBytes=10*1024*1024,  # 10 MB
+    backupCount=5
+)
+contract_calculations_handler.setLevel(logging.INFO)
+
+# Create formatter for contract calculations
+contract_calculations_formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+contract_calculations_handler.setFormatter(contract_calculations_formatter)
+
+# Add handler to the logger
+contract_calculations_logger.addHandler(contract_calculations_handler)
+contract_calculations_logger.propagate = False # Prevent duplicate logs
+
 
 class OrderCleanupService:
     def __init__(self, db_url: str = None):
@@ -119,7 +148,6 @@ class OrderCleanupService:
                                 transaction_date=current_time,  # Use Moscow time for consistency
                                 amount=abs(bonus_tx.amount),  # Positive amount for reversal
                                 transaction_type=BonusTransactionType.ACCRUAL,
-                                description="Возврат бонусов: отмена заказа"
                             )
                             db.add(reversal_transaction)
 
@@ -170,7 +198,6 @@ class OrderCleanupService:
                         and_(
                             Session.status != SessionStatus.CANCELLED,
                             Session.status != SessionStatus.COMPLETED,
-                            # Compare with timezone-naive current time to match database storage format
                             Session.end_datetime < current_time_naive
                         )
                     )
@@ -272,13 +299,18 @@ class OrderCleanupService:
                 from app.models.order import Order
                 from app.models.film import Film
                 from app.models.enums import OrderStatus as OrderStatusEnum, ContractStatus, PaymentStatus
-                from sqlalchemy.orm import selectinload
                 from sqlalchemy import and_
+                from sqlalchemy.orm import selectinload
 
                 # Find rental contracts that expired today (end_date < current_date and status is active)
                 # Exclude contracts that already have pending payments created
                 expired_contracts_result = await db.execute(
                     select(RentalContract)
+                    .options(
+                        selectinload(RentalContract.film),
+                        selectinload(RentalContract.distributor),
+                        selectinload(RentalContract.cinema)
+                    )
                     .filter(
                         and_(
                             RentalContract.rental_end_date < current_time.date(),  # Contract has ended
@@ -304,7 +336,7 @@ class OrderCleanupService:
                     existing_payment = existing_payment_result.scalar_one_or_none()
 
                     if existing_payment:
-                        # Payment already exists for this contract
+                        # Payment already exists for this contract, skip further processing
                         continue
 
                     # Calculate revenue from tickets sold under this contract up to the expiration date
@@ -339,7 +371,8 @@ class OrderCleanupService:
                             and_(
                                 Ticket.session_id.in_(session_ids),
                                 Order.status == OrderStatusEnum.paid,
-                                Ticket.purchase_date <= contract.rental_end_date  # Only tickets purchased during contract period
+                                Ticket.purchase_date >= contract.rental_start_date,  # Ticket purchased after contract started
+                                Ticket.purchase_date <= contract.rental_end_date   # Ticket purchased before contract ended
                             )
                         )
                     )
@@ -348,13 +381,22 @@ class OrderCleanupService:
                     # Calculate total revenue from tickets
                     total_revenue = sum(float(ticket.price) for ticket in contract_tickets)
 
-                    # Calculate distributor's share (percentage of total revenue)
-                    distributor_share = total_revenue * float(contract.distributor_percentage) / 100
+                    # Calculate tax amount based on settings
+                    tax_percentage = float(settings.TAX_PERCENTAGE)
+                    tax_amount = total_revenue * tax_percentage / 100
+                    revenue_after_tax = total_revenue - tax_amount
+
+                    # Calculate distributor's share (percentage of revenue after tax)
+                    distributor_percentage = float(contract.distributor_percentage)
+                    distributor_share = revenue_after_tax * distributor_percentage / 100
+
+                    # Calculate cinema's share (what remains after distributor gets their percentage)
+                    cinema_share = revenue_after_tax - distributor_share
 
                     # Create payment history record
                     new_payment = PaymentHistory(
                         rental_contract_id=contract.id,
-                        calculated_amount=distributor_share,
+                        calculated_amount=distributor_share,  # This is what distributor will receive
                         calculation_date=current_time,
                         payment_status=PaymentStatus.PENDING,
                         payment_date=None,  # Initially no payment date until paid
@@ -366,7 +408,22 @@ class OrderCleanupService:
                     # Update the contract status to indicate it has pending payments
                     contract.status = ContractStatus.PENDING  # Change status to pending payment
 
-                    logger.info(f"Created pending payment of {distributor_share} for expired contract {contract.id}")
+                    # Log detailed calculation breakdown only when a new payment is created
+                    contract_calculations_logger.info(f"Contract ID: {contract.id}")
+                    contract_calculations_logger.info(f"Contract Number: {contract.contract_number}")
+                    contract_calculations_logger.info(f"Distributor: {contract.distributor.name if contract.distributor else 'Unknown'}")
+                    contract_calculations_logger.info(f"Cinema: {contract.cinema.name if contract.cinema else 'Unknown'}")
+                    contract_calculations_logger.info(f"Total revenue (before tax): {total_revenue:.2f} ₽")
+                    contract_calculations_logger.info(f"Tax percentage: {tax_percentage}%")
+                    contract_calculations_logger.info(f"Tax amount: {tax_amount:.2f} ₽")
+                    contract_calculations_logger.info(f"Revenue after tax: {revenue_after_tax:.2f} ₽")
+                    contract_calculations_logger.info(f"Distributor percentage: {distributor_percentage}%")
+                    contract_calculations_logger.info(f"Distributor share: {distributor_share:.2f} ₽")
+                    contract_calculations_logger.info(f"Cinema share: {cinema_share:.2f} ₽")
+                    contract_calculations_logger.info(f"Payment to distributor: {distributor_share:.2f} ₽")
+                    contract_calculations_logger.info("="*60)
+
+                    logger.info(f"Created pending payment of {distributor_share:.2f} for expired contract {contract.id}")
 
                     processed_count += 1
 

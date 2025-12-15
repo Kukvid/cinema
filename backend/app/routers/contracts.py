@@ -696,6 +696,8 @@ async def pay_contract_payment(
         current_time = current_datetime_moscow  # Use the same Moscow datetime
         payment.payment_document_number = f"PAY_{payment.rental_contract_id}_{int(current_time.timestamp())}_{random.randint(1000, 9999)}"
 
+    await db.flush()
+
     # Check if all payments for this contract are now paid
     remaining_payments_result = await db.execute(
         select(PaymentHistory)
@@ -706,11 +708,14 @@ async def pay_contract_payment(
             )
         )
     )
-    remaining_payments = remaining_payments_result.scalars().all()
 
+    remaining_payments = remaining_payments_result.scalars().all()
     if not remaining_payments:
-        # All payments for this contract are now paid, update contract status
-        payment.rental_contract.status = ContractStatus.PAID
+        contract_result = await db.execute(
+            select(RentalContract).filter(RentalContract.id == payment.rental_contract_id)
+        )
+        contract = contract_result.scalar_one()
+        contract.status = ContractStatus.PAID
 
     await db.commit()
     await db.refresh(payment)

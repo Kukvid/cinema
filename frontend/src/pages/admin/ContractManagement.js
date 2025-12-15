@@ -546,7 +546,7 @@ const ContractManagement = () => {
                                                 fontSize: "0.8rem",
                                                 fontWeight: "bold",
                                                 backgroundColor:
-                                                    contract.status === "ACTIVE"
+                                                    contract.status === "ACTIVE" || contract.status === "PAID"
                                                         ? "rgba(76, 175, 80, 0.2)"
                                                         : contract.status ===
                                                             "EXPIRED"
