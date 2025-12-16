@@ -198,7 +198,7 @@ const Dashboard = () => {
             restrictedForStaff: true,
         },
         {
-            title: "Управление платежами по контрактам",
+            title: "Управление платежами по договорам",
             icon: <MoneyIcon />,
             path: "/admin/contract-payments",
             description:

@@ -30,7 +30,7 @@ async def get_cinemas(
     if status_filter:
         query = query.filter(Cinema.status == status_filter)
 
-    query = query.offset(skip).limit(limit)
+    query = query.offset(skip).limit(limit).order_by(Cinema.id.desc())
     result = await db.execute(query)
     cinemas = result.scalars().all()
 
