@@ -167,7 +167,7 @@ async def get_session_seats(
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session with id {session_id} not found"
+            detail=f"Сеанс с id {session_id} не найден"
         )
 
     # Get all seats for the hall
@@ -253,7 +253,7 @@ async def create_session(
     if not hall:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Hall with id {session_data.hall_id} not found"
+            detail=f"Зал с id {session_data.hall_id} не найден"
         )
 
     # Check if user has permission to create session in this cinema
@@ -270,7 +270,7 @@ async def create_session(
     if not film:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Film with id {session_data.film_id} not found"
+            detail=f"Фильм с id {session_data.film_id} не найден"
         )
 
     # Check if the session date is in the past
@@ -279,7 +279,7 @@ async def create_session(
     if session_start_time < current_time:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot create a session in the past"
+            detail="Нельзя создать сеанс в прошлом"
         )
 
     # Check if the session ends before it starts
@@ -288,7 +288,7 @@ async def create_session(
     if end_time <= start_time:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Session end time must be after start time"
+            detail="Время окончания сеанса должно быть позже времени начала"
         )
 
     # Check if the film has an active rental contract for this session's date
@@ -299,7 +299,7 @@ async def create_session(
                 RentalContract.film_id == session_data.film_id,
                 RentalContract.rental_start_date <= session_date,
                 RentalContract.rental_end_date >= session_date,
-                RentalContract.status.in_(["ACTIVE", "PENDING", "PAID"])  # Active, pending payment, or paid contracts
+                RentalContract.status.in_(["ACTIVE"])  # Active, pending payment, or paid contracts
             )
         )
     )
@@ -308,7 +308,7 @@ async def create_session(
     if not rental_contract:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No active rental contract found for the film on the specified date"
+            detail="Нет активного договора аренды для фильма на указанную дату"
         )
 
     # Check for time conflicts in the same hall
@@ -332,7 +332,7 @@ async def create_session(
     if conflicting_session:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Time conflict with existing session (ID: {conflicting_session.id}) in the same hall"
+            detail=f"Конфликт времени с существующим сеансом (ID: {conflicting_session.id}) в том же зале"
         )
 
     # Convert datetime values to timezone-naive in Moscow timezone for database storage
@@ -388,14 +388,14 @@ async def update_session(
     if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin users can update sessions"
+            detail="Только администраторы могут обновлять сеансы"
         )
 
     # For admin users, check if they can manage session in this cinema
     if current_user.role.name == "admin" and session.hall.cinema_id != current_user.cinema_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin can only update sessions in their assigned cinema"
+            detail="Администратор может обновлять сеансы только в назначенном кинотеатре"
         )
 
     # Check if the session date is in the past when changing the date
@@ -405,7 +405,7 @@ async def update_session(
         if session_start_time < current_time:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot update session to a past date"
+                detail="Нельзя изменить сеанс на прошедшую дату"
             )
 
     # Check if the session ends before it starts when changing the end time
@@ -416,7 +416,7 @@ async def update_session(
         if end_time_naive <= start_time_naive:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Session end time must be after start time"
+                detail="Время окончания сеанса должно быть позже времени начала"
             )
 
     # Check if the film has an active rental contract for the new session date
@@ -437,7 +437,7 @@ async def update_session(
         if not rental_contract:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No active rental contract found for the film on the specified date"
+                detail="Нет активного договора аренды для фильма на указанную дату"
             )
 
     # If changing time, check for time conflicts in the same hall
@@ -467,7 +467,7 @@ async def update_session(
         if conflicting_session:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Time conflict with existing session (ID: {conflicting_session.id}) in the same hall"
+                detail=f"Конфликт времени с существующим сеансом (ID: {conflicting_session.id}) в том же зале"
             )
 
     # Update fields, handling datetime values with timezone conversion
@@ -511,21 +511,21 @@ async def delete_session(
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session with id {session_id} not found"
+            detail=f"Сеанс с id {session_id} не найден"
         )
 
     # Check user permissions
     if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin users can delete sessions"
+            detail="Только администраторы могут удалять сеансы"
         )
 
     # For admin users, check if they can manage session in this cinema
     if current_user.role.name == "admin" and session.hall.cinema_id != current_user.cinema_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin can only delete sessions in their assigned cinema"
+            detail="Администратор может удалять сеансы только в назначенном кинотеатре"
         )
 
     await db.delete(session)

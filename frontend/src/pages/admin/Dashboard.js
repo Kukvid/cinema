@@ -246,7 +246,10 @@ const Dashboard = () => {
             (item) =>
                 item.title !== "Управление пользователями" &&
                 item.title !== "Промокоды" &&
-                item.title !== "Управление кинотеатрами"
+                item.title !== "Управление кинотеатрами" &&
+                item.title !== "Управление жанрами" &&
+                item.title !== "Категории кинобара" &&
+                item.title !== "Управление дистрибьюторами"
         );
     } else if (isSuperAdmin) {
         // Super admin видит всё

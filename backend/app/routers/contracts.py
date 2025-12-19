@@ -207,7 +207,7 @@ async def create_contract(
             detail="Contract date cannot be after rental start date"
         )
 
-    if contract_data.rental_start_date < date.today():
+    if contract_data.rental_start_date <= date.today():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Rental start date cannot be before today"

@@ -312,11 +312,16 @@ const CinemasManage = () => {
                             inputProps={{ step: "any" }}
                             {...register("latitude", {
                                 setValueAs: (value) =>
-                                    value === "" ? null : parseFloat(value),
-                                validate: (value) =>
-                                    value === null ||
-                                    (value >= -90 && value <= 90) ||
-                                    "Широта должна быть от -90 до 90",
+                                    value === "" ? null : Number(value),
+                                validate: (value) => {
+                                    if (value === null || value === undefined)
+                                        return true; // разрешаем null
+                                    const numValue = Number(value);
+                                    return (
+                                        (numValue >= -90 && numValue <= 90) ||
+                                        "Широта должна быть от -90 до 90"
+                                    );
+                                },
                             })}
                             error={!!errors.latitude}
                             helperText={errors.latitude?.message}
@@ -330,12 +335,17 @@ const CinemasManage = () => {
                             inputProps={{ step: "any" }}
                             {...register("longitude", {
                                 setValueAs: (value) =>
-                                    value === "" ? null : parseFloat(value),
-                                validate: (value) =>
-                                    value === null ||
-                                    (value >= -180 && value <= 180) ||
-                                    "Долгота должна быть от -180 до 180",
-                            })}
+                                    value === "" ? null : Number(value),
+                                validate: (value) => {
+                                    if (value === null || value === undefined)
+                                        return true;
+                                    const numValue = Number(value);
+                                    return (
+                                        (numValue >= -180 && numValue <= 180) ||
+                                        "Долгота должна быть от -180 до 180"
+                                    );
+                                },
+                            })}поле 
                             error={!!errors.longitude}
                             helperText={errors.longitude?.message}
                         />

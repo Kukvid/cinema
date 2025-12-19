@@ -265,10 +265,10 @@ async def create_user(
     Only admin users can create other users.
     """
     # Проверка прав доступа
-    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
+    if not current_user.role or current_user.role.name not in ["super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin users can create other users"
+            detail="Only super_admin users can create other users"
         )
 
     # Проверка уникальности email
@@ -291,6 +291,8 @@ async def create_user(
     # Подготовка данных для создания пользователя
     hashed_password = get_password_hash(user_create.password)
 
+    if user_create.cinema_id==None and user_create.role.name=="super_admin":
+        user_create.cinema_id=0
     # Создаем объект ORM User, используя данные из user_create
     db_user = User(
         email=user_create.email,
