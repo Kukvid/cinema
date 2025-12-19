@@ -196,7 +196,6 @@ const FoodCategoriesManage = () => {
             <TableRow>
               <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>ID</TableCell>
               <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>Название</TableCell>
-              <TableCell sx={{ color: '#e50914', fontWeight: 700 }}>Порядок отображения</TableCell>
               <TableCell sx={{ color: '#e50914', fontWeight: 700 }} align="right">
                 Действия
               </TableCell>
@@ -226,34 +225,6 @@ const FoodCategoriesManage = () => {
                     <Typography variant="body1" sx={{ fontWeight: 600 }}>
                       {category.name}
                     </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Chip
-                        label={category.display_order}
-                        size="small"
-                        sx={{
-                          background: 'linear-gradient(135deg, rgba(229, 9, 20, 0.3) 0%, rgba(229, 9, 20, 0.1) 100%)',
-                          color: '#fff',
-                          fontWeight: 600,
-                        }}
-                      />
-                      <IconButton
-                        size="small"
-                        onClick={() => handleChangeOrder(category, 'up')}
-                        disabled={category.display_order <= 1}
-                        sx={{ color: '#ffd700' }}
-                      >
-                        <ArrowUpIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleChangeOrder(category, 'down')}
-                        sx={{ color: '#ffd700' }}
-                      >
-                        <ArrowDownIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
                   </TableCell>
                   <TableCell align="right">
                     <IconButton
@@ -315,22 +286,6 @@ const FoodCategoriesManage = () => {
               error={!!errors.name}
               helperText={errors.name?.message}
               sx={{ mb: 2 }}
-            />
-            <TextField
-              margin="dense"
-              label="Порядок отображения"
-              type="number"
-              fullWidth
-              variant="outlined"
-              {...register('display_order', {
-                required: 'Порядок отображения обязателен',
-                min: {
-                  value: 0,
-                  message: 'Минимальное значение - 0',
-                },
-              })}
-              error={!!errors.display_order}
-              helperText={errors.display_order?.message || 'Чем меньше число, тем выше категория в списке'}
             />
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>

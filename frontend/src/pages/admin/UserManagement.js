@@ -49,7 +49,7 @@ const UserManagement = () => {
     email: '',
     phone: '',
     role_id: '',
-    cinema_id: '', // Новое поле для cinema_id
+    cinema_id: 0, // Новое поле для cinema_id
     status: 'active',
     password: '',
   });
@@ -85,7 +85,7 @@ const UserManagement = () => {
         email: user.email || '',
         phone: user.phone || '',
         role_id: user.role_id || '',
-        cinema_id: user.cinema_id || '', // Добавляем cinema_id
+        cinema_id: user.cinema_id || 0, // Добавляем cinema_id
         status: user.status || 'active',
         password: '',
       });
@@ -97,7 +97,7 @@ const UserManagement = () => {
         email: '',
         phone: '',
         role_id: '',
-        cinema_id: '', // Добавляем cinema_id
+        cinema_id: 0, // Добавляем cinema_id
         status: 'active',
         password: '',
       });
@@ -114,7 +114,7 @@ const UserManagement = () => {
       email: '',
       phone: '',
       role_id: '',
-      cinema_id: '', // Добавляем cinema_id
+      cinema_id: 0, // Добавляем cinema_id
       status: 'active'
     });
   };

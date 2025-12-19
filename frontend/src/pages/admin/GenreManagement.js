@@ -65,13 +65,11 @@ const GenreManagement = () => {
       setEditingGenre(genre);
       setFormData({
         name: genre.name || '',
-        description: genre.description || ''
       });
     } else {
       setEditingGenre(null);
       setFormData({
         name: '',
-        description: ''
       });
     }
     setDialogOpen(true);
@@ -82,7 +80,6 @@ const GenreManagement = () => {
     setEditingGenre(null);
     setFormData({
       name: '',
-      description: ''
     });
   };
 
@@ -164,7 +161,6 @@ const GenreManagement = () => {
             <TableRow>
               <TableCell>ID</TableCell>
               <TableCell>Название</TableCell>
-              <TableCell>Описание</TableCell>
               <TableCell>Действия</TableCell>
             </TableRow>
           </TableHead>
@@ -173,7 +169,6 @@ const GenreManagement = () => {
               <TableRow key={genre.id}>
                 <TableCell>{genre.id}</TableCell>
                 <TableCell>{genre.name}</TableCell>
-                <TableCell>{genre.description}</TableCell>
                 <TableCell>
                   <Button
                     startIcon={<EditIcon />}
@@ -214,17 +209,6 @@ const GenreManagement = () => {
                 value={formData.name}
                 onChange={handleInputChange}
                 required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Описание"
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                multiline
-                rows={3}
               />
             </Grid>
           </Grid>

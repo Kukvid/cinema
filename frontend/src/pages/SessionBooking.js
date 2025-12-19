@@ -676,21 +676,63 @@ const SessionBooking = () => {
                                                     variant="body2"
                                                     color="text.secondary"
                                                     sx={{
-                                                        mb: 1,
+                                                        mb: 0.5,
                                                         fontSize: "0.85rem",
                                                     }}
                                                 >
                                                     {item.description}
                                                 </Typography>
-                                                <Typography
-                                                    variant="h6"
+                                                <Box
                                                     sx={{
-                                                        color: "#46d369",
-                                                        fontWeight: 700,
+                                                        display: "flex",
+                                                        flexWrap: "wrap",
+                                                        gap: 1,
+                                                        mb: 1,
                                                     }}
                                                 >
-                                                    {item.price} ₽
-                                                </Typography>
+                                                    <Typography
+                                                        variant="h6"
+                                                        sx={{
+                                                            color: "#46d369",
+                                                            fontWeight: 700,
+                                                            fontSize: "1rem",
+                                                        }}
+                                                    >
+                                                        {item.price} ₽
+                                                    </Typography>
+                                                    {item.portion_size && (
+                                                        <Typography
+                                                            variant="caption"
+                                                            sx={{
+                                                                background: "rgba(255, 255, 255, 0.15)",
+                                                                px: 1,
+                                                                py: 0.25,
+                                                                borderRadius: 1,
+                                                                fontSize: "0.75rem",
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                            }}
+                                                        >
+                                                            🥄 {item.portion_size}
+                                                        </Typography>
+                                                    )}
+                                                    {item.calories !== null && item.calories !== undefined && (
+                                                        <Typography
+                                                            variant="caption"
+                                                            sx={{
+                                                                background: "rgba(255, 255, 255, 0.15)",
+                                                                px: 1,
+                                                                py: 0.25,
+                                                                borderRadius: 1,
+                                                                fontSize: "0.75rem",
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                            }}
+                                                        >
+                                                            🔥 {item.calories} ккал
+                                                        </Typography>
+                                                    )}
+                                                </Box>
                                                 <Typography
                                                     variant="caption"
                                                     color="text.secondary"

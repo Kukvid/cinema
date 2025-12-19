@@ -1,432 +1,422 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
-  Container,
-  Typography,
-  Box,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Alert,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Grid,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Typography as MuiTypography
-} from '@mui/material';
+    Container,
+    Typography,
+    Box,
+    Paper,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Button,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    TextField,
+    Alert,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    Grid,
+    Accordion,
+    AccordionSummary,
+    AccordionDetails,
+    Typography as MuiTypography,
+} from "@mui/material";
 import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Save as SaveIcon,
-  Cancel as CancelIcon,
-  ExpandMore as ExpandMoreIcon
-} from '@mui/icons-material';
-import { hallsAPI } from '../../api/halls';
-import { cinemasAPI } from '../../api/cinemas';
-import Loading from '../../components/Loading';
-import { useAuth } from '../../context/AuthContext';
+    Add as AddIcon,
+    Edit as EditIcon,
+    Delete as DeleteIcon,
+    Save as SaveIcon,
+    Cancel as CancelIcon,
+    ExpandMore as ExpandMoreIcon,
+} from "@mui/icons-material";
+import { hallsAPI } from "../../api/halls";
+import { cinemasAPI } from "../../api/cinemas";
+import Loading from "../../components/Loading";
+import { useAuth } from "../../context/AuthContext";
 
 const HallManagement = () => {
-  const { user: currentUser } = useAuth();
-  const [halls, setHalls] = useState([]);
-  const [cinemas, setCinemas] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingHall, setEditingHall] = useState(null);
-  const [expandedHall, setExpandedHall] = useState(null);
-  const [formData, setFormData] = useState({
-    cinema_id: '',
-    name: '',
-    hall_type: 'standard',
-    capacity: 0,
-    description: '',
-    layout_configuration: ''
-  });
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [hallsData, cinemasData] = await Promise.all([
-        hallsAPI.getHalls(),
-        cinemasAPI.getCinemas()
-      ]);
-
-      // For staff, filter halls to only show halls from their cinema
-      let filteredHalls = hallsData;
-
-      if (currentUser?.role === 'staff' && currentUser?.cinema_id) {
-        filteredHalls = hallsData.filter(hall => {
-          // Match halls with the staff's cinema
-          return hall.cinema_id === currentUser.cinema_id;
-        });
-      }
-
-      setHalls(filteredHalls);
-      setCinemas(cinemasData);
-    } catch (err) {
-      setError('Не удалось загрузить данные');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOpenDialog = (hall = null) => {
-    if (hall) {
-      setEditingHall(hall);
-      setFormData({
-        cinema_id: hall.cinema_id || '',
-        name: hall.name || '',
-        hall_type: hall.hall_type || 'standard',
-        capacity: hall.capacity || 0,
-        description: hall.description || '',
-        layout_configuration: hall.layout_configuration || ''
-      });
-    } else {
-      setEditingHall(null);
-      setFormData({
-        cinema_id: '',
-        name: '',
-        hall_type: 'standard',
+    const { user: currentUser } = useAuth();
+    const [halls, setHalls] = useState([]);
+    const [cinemas, setCinemas] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [editingHall, setEditingHall] = useState(null);
+    const [expandedHall, setExpandedHall] = useState(null);
+    const [formData, setFormData] = useState({
+        cinema_id: "",
+        name: "",
+        hall_type: "standard",
         capacity: 0,
-        description: '',
-        layout_configuration: ''
-      });
-    }
-    setDialogOpen(true);
-  };
-
-  const handleCloseDialog = () => {
-    setDialogOpen(false);
-    setEditingHall(null);
-    setFormData({
-      cinema_id: '',
-      name: '',
-      hall_type: 'standard',
-      capacity: 0,
-      description: '',
-      layout_configuration: ''
     });
-  };
 
-  const handleSubmit = async () => {
-    try {
-      // Prepare submit data without hall_number since it's now optional and backend will generate it if needed
-      let submitData = {
-        ...formData,
-        capacity: parseInt(formData.capacity)
-      };
+    useEffect(() => {
+        loadData();
+    }, []);
 
-      // For staff users, ensure they can only create/update halls for their assigned cinema
-      if (currentUser?.role === 'staff' && currentUser?.cinema_id) {
-        submitData.cinema_id = currentUser.cinema_id;
-      }
+    const loadData = async () => {
+        try {
+            setLoading(true);
+            const [hallsData, cinemasData] = await Promise.all([
+                hallsAPI.getHalls(),
+                cinemasAPI.getCinemas(),
+            ]);
 
-      if (editingHall) {
-        await hallsAPI.updateHall(editingHall.id, submitData);
-      } else {
-        await hallsAPI.createHall(submitData);
-      }
-      await loadData();
-      handleCloseDialog();
-    } catch (err) {
-      console.error('Error submitting hall:', err);
-      setError(err.response?.data?.detail || 'Не удалось сохранить зал');
+            // For staff, filter halls to only show halls from their cinema
+            let filteredHalls = hallsData;
+
+            if (currentUser?.role === "staff" && currentUser?.cinema_id) {
+                filteredHalls = hallsData.filter((hall) => {
+                    // Match halls with the staff's cinema
+                    return hall.cinema_id === currentUser.cinema_id;
+                });
+            }
+
+            setHalls(filteredHalls);
+            setCinemas(cinemasData);
+        } catch (err) {
+            setError("Не удалось загрузить данные");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleOpenDialog = (hall = null) => {
+        if (hall) {
+            setEditingHall(hall);
+            setFormData({
+                cinema_id: hall.cinema_id || "",
+                name: hall.name || "",
+                hall_type: hall.hall_type || "standard",
+                capacity: hall.capacity || 0,
+            });
+        } else {
+            setEditingHall(null);
+            setFormData({
+                cinema_id: "",
+                name: "",
+                hall_type: "standard",
+                capacity: 0,
+            });
+        }
+        setDialogOpen(true);
+    };
+
+    const handleCloseDialog = () => {
+        setDialogOpen(false);
+        setEditingHall(null);
+        setFormData({
+            cinema_id: "",
+            name: "",
+            hall_type: "standard",
+            capacity: 0,
+            layout_configuration: "",
+        });
+    };
+
+    const handleSubmit = async () => {
+        try {
+            // Prepare submit data without hall_number since it's now optional and backend will generate it if needed
+            let submitData = {
+                ...formData,
+                capacity: parseInt(formData.capacity),
+            };
+
+            // For staff users, ensure they can only create/update halls for their assigned cinema
+            if (currentUser?.role === "staff" && currentUser?.cinema_id) {
+                submitData.cinema_id = currentUser.cinema_id;
+            }
+
+            if (editingHall) {
+                await hallsAPI.updateHall(editingHall.id, submitData);
+            } else {
+                await hallsAPI.createHall(submitData);
+            }
+            await loadData();
+            handleCloseDialog();
+        } catch (err) {
+            console.error("Error submitting hall:", err);
+            setError(err.response?.data?.detail || "Не удалось сохранить зал");
+        }
+    };
+
+    const handleDelete = async (hallId) => {
+        if (window.confirm("Удалить зал?")) {
+            try {
+                await hallsAPI.deleteHall(hallId);
+                await loadData();
+            } catch (err) {
+                setError("Не удалось удалить зал");
+            }
+        }
+    };
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData((prev) => ({
+            ...prev,
+            [name]: value,
+        }));
+    };
+
+    const HALL_TYPE_TRANSLATIONS = {
+        standard: "Обычный",
+        vip: "VIP",
+        imax: "IMAX",
+        four_dx: "4DX",
+    };
+
+    if (loading) {
+        return <Loading message="Загрузка залов..." />;
     }
-  };
 
-  const handleDelete = async (hallId) => {
-    if (window.confirm('Удалить зал?')) {
-      try {
-        await hallsAPI.deleteHall(hallId);
-        await loadData();
-      } catch (err) {
-        setError('Не удалось удалить зал');
-      }
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  if (loading) {
-    return <Loading message="Загрузка залов..." />;
-  }
-
-  return (
-    <Container maxWidth="lg" sx={{ py: 6 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography
-          variant="h4"
-          sx={{
-            fontWeight: 700,
-            background: 'linear-gradient(135deg, #e50914 0%, #ffd700 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}
+    return (
+        <Container
+            maxWidth="lg"
+            sx={{ py: 6 }}
         >
-          Управление залами
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-          sx={{
-            background: 'linear-gradient(135deg, #e50914 0%, #b00710 100%)',
-            '&:hover': {
-              background: 'linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)',
-            },
-          }}
-        >
-          Добавить зал
-        </Button>
-      </Box>
+            <Box
+                sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    mb: 4,
+                }}
+            >
+                <Typography
+                    variant="h4"
+                    sx={{
+                        fontWeight: 700,
+                        background:
+                            "linear-gradient(135deg, #e50914 0%, #ffd700 100%)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                    }}
+                >
+                    Управление залами
+                </Typography>
+                <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => handleOpenDialog()}
+                    sx={{
+                        background:
+                            "linear-gradient(135deg, #e50914 0%, #b00710 100%)",
+                        "&:hover": {
+                            background:
+                                "linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)",
+                        },
+                    }}
+                >
+                    Добавить зал
+                </Button>
+            </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
+            {error && (
+                <Alert
+                    severity="error"
+                    sx={{ mb: 3 }}
+                >
+                    {error}
+                </Alert>
+            )}
 
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>ID</TableCell>
-              <TableCell>Кинотеатр</TableCell>
-              <TableCell>Название</TableCell>
-              <TableCell>Тип</TableCell>
-              <TableCell>Вместимость</TableCell>
-              <TableCell>Статус</TableCell>
-              <TableCell>Действия</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {halls.map((hall) => (
-              <TableRow key={hall.id}>
-                <TableCell>{hall.id}</TableCell>
-                <TableCell>{cinemas.find(c => c.id === hall.cinema_id)?.name || 'N/A'}</TableCell>
-                <TableCell>{hall.name}</TableCell>
-                <TableCell>{hall.hall_type}</TableCell>
-                <TableCell>{hall.capacity}</TableCell>
-                <TableCell>{hall.status}</TableCell>
-                <TableCell>
-                  <Button
-                    startIcon={<EditIcon />}
-                    onClick={() => handleOpenDialog(hall)}
-                    color="primary"
-                    size="small"
-                    sx={{ mr: 1 }}
-                  >
-                    Редактировать
-                  </Button>
-                  <Button
-                    startIcon={<DeleteIcon />}
-                    onClick={() => handleDelete(hall.id)}
-                    color="error"
-                    size="small"
-                  >
-                    Удалить
-                  </Button>
-                  
-                  <Accordion 
-                    expanded={expandedHall === hall.id} 
-                    onChange={(e, expanded) => setExpandedHall(expanded ? hall.id : null)}
-                    sx={{ mt: 1, boxShadow: 'none' }}
-                  >
-                    <AccordionSummary
-                      expandIcon={<ExpandMoreIcon />}
-                      sx={{ 
-                        background: 'rgba(229, 9, 20, 0.1)', 
-                        px: 2,
-                        '&:hover': { background: 'rgba(229, 9, 20, 0.15)' }
-                      }}
+            <TableContainer component={Paper}>
+                <Table>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell>ID</TableCell>
+                            <TableCell>Кинотеатр</TableCell>
+                            <TableCell>Название</TableCell>
+                            <TableCell>Тип</TableCell>
+                            <TableCell>Вместимость</TableCell>
+                            <TableCell>Статус</TableCell>
+                            <TableCell>Действия</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {halls.map((hall) => (
+                            <TableRow key={hall.id}>
+                                <TableCell>{hall.id}</TableCell>
+                                <TableCell>
+                                    {cinemas.find(
+                                        (c) => c.id === hall.cinema_id
+                                    )?.name || "N/A"}
+                                </TableCell>
+                                <TableCell>{hall.name}</TableCell>
+                                <TableCell>{HALL_TYPE_TRANSLATIONS[hall.hall_type] || hall.hall_type}</TableCell>
+                                <TableCell>{hall.capacity}</TableCell>
+                                <TableCell>{hall.status}</TableCell>
+                                <TableCell>
+                                    <Button
+                                        startIcon={<EditIcon />}
+                                        onClick={() => handleOpenDialog(hall)}
+                                        color="primary"
+                                        size="small"
+                                        sx={{ mr: 1 }}
+                                    >
+                                        Редактировать
+                                    </Button>
+                                    <Button
+                                        startIcon={<DeleteIcon />}
+                                        onClick={() => handleDelete(hall.id)}
+                                        color="error"
+                                        size="small"
+                                    >
+                                        Удалить
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+
+            {/* Modal for creating/editing hall */}
+            <Dialog
+                open={dialogOpen}
+                onClose={handleCloseDialog}
+                maxWidth="md"
+                fullWidth
+            >
+                <DialogTitle>
+                    {editingHall ? "Редактировать зал" : "Добавить зал"}
+                </DialogTitle>
+                <DialogContent>
+                    <Grid
+                        container
+                        spacing={2}
+                        sx={{ mt: 1 }}
                     >
-                      <MuiTypography variant="body2" color="text.secondary">
-                        Конфигурация рассадки
-                      </MuiTypography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <TextField
-                        fullWidth
-                        label="Конфигурация макета"
-                        multiline
-                        rows={4}
-                        value={hall.layout_configuration || ''}
-                        disabled
-                        sx={{ mt: 2 }}
-                      />
-                    </AccordionDetails>
-                  </Accordion>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Modal for creating/editing hall */}
-      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-        <DialogTitle>
-          {editingHall ? 'Редактировать зал' : 'Добавить зал'}
-        </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth required>
-                <InputLabel>Кинотеатр</InputLabel>
-                <Select
-                  name="cinema_id"
-                  value={formData.cinema_id}
-                  onChange={handleInputChange}
-                  disabled={currentUser?.role === 'staff'} // Staff can only select their assigned cinema
-                >
-                  {currentUser?.role === 'staff' && currentUser?.cinema_id ? (
-                    // For staff, only show their assigned cinema
-                    cinemas
-                      .filter(cinema => cinema.id === currentUser.cinema_id)
-                      .map((cinema) => (
-                        <MenuItem key={cinema.id} value={cinema.id}>
-                          {cinema.name}
-                        </MenuItem>
-                      ))
-                  ) : (
-                    // For admin, show all cinemas
-                    cinemas.map((cinema) => (
-                      <MenuItem key={cinema.id} value={cinema.id}>
-                        {cinema.name}
-                      </MenuItem>
-                    ))
-                  )}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Название зала"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Тип зала</InputLabel>
-                <Select
-                  name="hall_type"
-                  value={formData.hall_type}
-                  onChange={handleInputChange}
-                >
-                  <MenuItem value="standard">Обычный</MenuItem>
-                  <MenuItem value="vip">VIP</MenuItem>
-                  <MenuItem value="imax">IMAX</MenuItem>
-                  <MenuItem value="four_dx">4DX</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Вместимость"
-                type="number"
-                name="capacity"
-                value={formData.capacity}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Описание"
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                multiline
-                rows={3}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Конфигурация макета (JSON)"
-                name="layout_configuration"
-                value={formData.layout_configuration}
-                onChange={handleInputChange}
-                multiline
-                rows={6}
-                helperText={
-                  <>
-                    Опишите конфигурацию мест в формате JSON
-                    <br />
-                    <strong>Пример формата:</strong>
-                    <br />
-                    <code style={{background: '#f5f5f5', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8em'}}>
-                      {`{
-  "rows": [
-    {
-      "row_number": 1,
-      "seats": [
-        {"seat_number": 1, "type": "regular", "available": true},
-        {"seat_number": 2, "type": "regular", "available": true},
-        {"seat_number": 3, "type": "vip", "available": true}
-      ]
-    }
-  ]
-}`}
-                    </code>
-                  </>
-                }
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog} startIcon={<CancelIcon />}>
-            Отмена
-          </Button>
-          <Button 
-            onClick={handleSubmit} 
-            variant="contained" 
-            startIcon={<SaveIcon />}
-            sx={{
-              background: 'linear-gradient(135deg, #46d369 0%, #2e7d32 100%)',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #5ce67c 0%, #388e3c 100%)',
-              },
-            }}
-          >
-            Сохранить
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Container>
-  );
+                        <Grid
+                            item
+                            xs={12}
+                            sm={6}
+                        >
+                            <FormControl
+                                fullWidth
+                                required
+                            >
+                                <InputLabel>Кинотеатр</InputLabel>
+                                <Select
+                                    name="cinema_id"
+                                    value={formData.cinema_id}
+                                    onChange={handleInputChange}
+                                    disabled={currentUser?.role === "staff"} // Staff can only select their assigned cinema
+                                >
+                                    {currentUser?.role === "staff" &&
+                                    currentUser?.cinema_id
+                                        ? // For staff, only show their assigned cinema
+                                          cinemas
+                                              .filter(
+                                                  (cinema) =>
+                                                      cinema.id ===
+                                                      currentUser.cinema_id
+                                              )
+                                              .map((cinema) => (
+                                                  <MenuItem
+                                                      key={cinema.id}
+                                                      value={cinema.id}
+                                                  >
+                                                      {cinema.name}
+                                                  </MenuItem>
+                                              ))
+                                        : // For admin, show all cinemas
+                                          cinemas.map((cinema) => (
+                                              <MenuItem
+                                                  key={cinema.id}
+                                                  value={cinema.id}
+                                              >
+                                                  {cinema.name}
+                                              </MenuItem>
+                                          ))}
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid
+                            item
+                            xs={12}
+                            sm={6}
+                        >
+                            <TextField
+                                fullWidth
+                                label="Название зала"
+                                name="name"
+                                value={formData.name}
+                                onChange={handleInputChange}
+                                required
+                            />
+                        </Grid>
+                        <Grid
+                            item
+                            xs={12}
+                            sm={6}
+                        >
+                            <FormControl fullWidth>
+                                <InputLabel>Тип зала</InputLabel>
+                                <Select
+                                    name="hall_type"
+                                    value={formData.hall_type}
+                                    onChange={handleInputChange}
+                                >
+                                    <MenuItem value="standard">
+                                        Обычный
+                                    </MenuItem>
+                                    <MenuItem value="vip">VIP</MenuItem>
+                                    <MenuItem value="imax">IMAX</MenuItem>
+                                    <MenuItem value="four_dx">4DX</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid
+                            item
+                            xs={12}
+                            sm={6}
+                        >
+                            <TextField
+                                fullWidth
+                                label="Вместимость"
+                                type="number"
+                                name="capacity"
+                                value={formData.capacity}
+                                onChange={handleInputChange}
+                                required
+                            />
+                        </Grid>
+                    </Grid>
+                </DialogContent>
+                <DialogActions>
+                    <Button
+                        onClick={handleCloseDialog}
+                        startIcon={<CancelIcon />}
+                    >
+                        Отмена
+                    </Button>
+                    <Button
+                        onClick={handleSubmit}
+                        variant="contained"
+                        startIcon={<SaveIcon />}
+                        sx={{
+                            background:
+                                "linear-gradient(135deg, #46d369 0%, #2e7d32 100%)",
+                            "&:hover": {
+                                background:
+                                    "linear-gradient(135deg, #5ce67c 0%, #388e3c 100%)",
+                            },
+                        }}
+                    >
+                        Сохранить
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </Container>
+    );
 };
 
 export default HallManagement;
