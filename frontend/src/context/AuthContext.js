@@ -17,17 +17,122 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Helper function to decode JWT token to check expiration
+  const decodeToken = (token) => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  // Function to refresh token
+  const refreshToken = async () => {
+    try {
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
+
+      const response = await authAPI.refreshToken(refreshToken);
+      const newAccessToken = response.access_token;
+
+      localStorage.setItem('token', newAccessToken);
+      setToken(newAccessToken);
+
+      // Update user data as well
+      const userData = await authAPI.getCurrentUser();
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+
+      return { success: true, token: newAccessToken };
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      setToken(null);
+      setUser(null);
+      setIsAuthenticated(false);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Set up token refresh interval (refresh 5 minutes before expiration)
+  useEffect(() => {
+    let refreshTimer;
+
+    const scheduleTokenRefresh = () => {
+      if (token) {
+        const decoded = decodeToken(token);
+        if (decoded && decoded.exp) {
+          const expiryTime = decoded.exp * 1000; // Convert to milliseconds
+          const currentTime = Date.now();
+          const timeUntilExpiry = expiryTime - currentTime;
+          const refreshTime = Math.max(0, timeUntilExpiry - 5 * 60 * 1000); // Refresh 5 minutes early
+
+          if (refreshTime > 0) {
+            refreshTimer = setTimeout(async () => {
+              await refreshToken();
+            }, refreshTime);
+          } else {
+            // Token already expired, try to refresh immediately
+            refreshToken();
+          }
+        }
+      }
+    };
+
+    if (isAuthenticated) {
+      scheduleTokenRefresh();
+    }
+
+    return () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+    };
+  }, [token, isAuthenticated]);
+
   useEffect(() => {
     const initAuth = async () => {
       const savedToken = localStorage.getItem('token');
       if (savedToken) {
         try {
-          const userData = await authAPI.getCurrentUser();
-          setUser(userData);
-          setIsAuthenticated(true);
+          // Decode the token to check if it's expired
+          const decoded = decodeToken(savedToken);
+          if (decoded && decoded.exp) {
+            const expiryTime = decoded.exp * 1000; // Convert to milliseconds
+            const currentTime = Date.now();
+
+            if (currentTime < expiryTime) {
+              // Token is still valid, use it directly
+              const userData = await authAPI.getCurrentUser();
+              setUser(userData);
+              setIsAuthenticated(true);
+            } else {
+              // Token has expired, try to refresh it
+              const refreshSuccess = await refreshToken();
+              if (refreshSuccess.success) {
+                setIsAuthenticated(true);
+              } else {
+                // Refresh failed, user needs to log in again
+                localStorage.removeItem('token');
+                localStorage.removeItem('refreshToken');
+                setToken(null);
+              }
+            }
+          } else {
+            // Invalid token format
+            localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
+            setToken(null);
+          }
         } catch (error) {
           console.error('Failed to fetch user:', error);
           localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
           localStorage.removeItem('user');
           setToken(null);
         }
@@ -42,8 +147,10 @@ export const AuthProvider = ({ children }) => {
     try {
       const data = await authAPI.login({ email, password });
       const accessToken = data.access_token;
+      const refreshToken = data.refresh_token;
 
       localStorage.setItem('token', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
       setToken(accessToken);
 
       const userData = await authAPI.getCurrentUser();
@@ -116,6 +223,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     setToken(null);
     setUser(null);

@@ -43,8 +43,37 @@ async def get_concession_items(
     if status_filter:
         query = query.filter(ConcessionItem.status == status_filter)
 
-    if current_user.role.name in [UserRoles.staff, UserRoles.admin]:
+    if current_user.role and current_user.role.name in [UserRoles.staff, UserRoles.admin]:
         query = query.filter(ConcessionItem.cinema_id == current_user.cinema_id)
+
+    query = query.order_by(ConcessionItem.name.asc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    items = result.scalars().all()
+
+    return items
+
+
+@router.get("/public", response_model=List[ConcessionItemResponse])
+async def get_public_concession_items(
+    cinema_id: int = Query(..., description="Filter by cinema ID"),
+    status_filter: ConcessionItemStatus | None = Query(None, alias="status", description="Filter by status"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get list of concession items without authentication (for public viewing)."""
+    query = select(ConcessionItem).options(selectinload(ConcessionItem.category))
+
+    # Filter by cinema_id (required for public endpoint)
+    query = query.filter(ConcessionItem.cinema_id == cinema_id)
+
+    # Only show available items for public by default
+    # If status_filter is provided, use that instead
+    if status_filter:
+        query = query.filter(ConcessionItem.status == status_filter)
+    else:
+        # Default to showing only available items for public
+        query = query.filter(ConcessionItem.status == ConcessionItemStatus.AVAILABLE)
 
     query = query.order_by(ConcessionItem.name.asc()).offset(skip).limit(limit)
     result = await db.execute(query)

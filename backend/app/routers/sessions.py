@@ -292,14 +292,16 @@ async def create_session(
         )
 
     # Check if the film has an active rental contract for this session's date
-    session_date = session_data.start_datetime.date()
+    session_start_date = session_data.start_datetime.date()
+    session_end_date = session_data.end_datetime.date()
+
     result = await db.execute(
         select(RentalContract).filter(
             and_(
                 RentalContract.film_id == session_data.film_id,
-                RentalContract.rental_start_date <= session_date,
-                RentalContract.rental_end_date >= session_date,
-                RentalContract.status.in_(["ACTIVE"])  # Active, pending payment, or paid contracts
+                RentalContract.rental_start_date <= session_end_date,  # Contract starts before or on session end date
+                RentalContract.rental_end_date >= session_start_date,  # Contract ends after or on session start date
+                RentalContract.status.in_(["ACTIVE"])  # Only active contracts
             )
         )
     )
@@ -420,15 +422,19 @@ async def update_session(
             )
 
     # Check if the film has an active rental contract for the new session date
-    if session_data.start_datetime:
-        session_date = session_data.start_datetime.date()
+    if session_data.start_datetime or session_data.end_datetime:
+        new_start = session_data.start_datetime or session.start_datetime
+        new_end = session_data.end_datetime or session.end_datetime
+        session_start_date = new_start.date()
+        session_end_date = new_end.date()
+
         result = await db.execute(
             select(RentalContract).filter(
                 and_(
                     RentalContract.film_id == session.film_id,
-                    RentalContract.rental_start_date <= session_date,
-                    RentalContract.rental_end_date >= session_date,
-                    RentalContract.status.in_(["ACTIVE", "PENDING", "PAID"])
+                    RentalContract.rental_start_date <= session_end_date,  # Contract starts before or on session end date
+                    RentalContract.rental_end_date >= session_start_date,  # Contract ends after or on session start date
+                    RentalContract.status.in_(["ACTIVE"])  # Only active contracts
                 )
             )
         )

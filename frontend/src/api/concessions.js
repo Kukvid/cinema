@@ -6,6 +6,32 @@ export const concessionsAPI = {
         return response.data;
     },
 
+    getPublicConcessionItems: async (params = {}) => {
+        // Don't use the default axios instance to avoid triggering auth redirect
+        const baseUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1';
+        const url = new URL(`${baseUrl}/concessions/public`);
+
+        // Add params to URL
+        Object.keys(params).forEach(key => {
+            if (params[key] !== undefined && params[key] !== null) {
+                url.searchParams.append(key, params[key]);
+            }
+        });
+
+        const response = await fetch(url.toString(), {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    },
+
     getConcessionItemById: async (id) => {
         const response = await axios.get(`/concessions/${id}`);
         return response.data;

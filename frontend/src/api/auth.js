@@ -31,4 +31,11 @@ export const authAPI = {
         const response = await axios.put("/auth/me", userData);
         return response.data;
     },
+
+    refreshToken: async (refreshToken) => {
+        const response = await axios.post("/auth/refresh", {
+            refresh_token: refreshToken
+        });
+        return response.data;
+    },
 };

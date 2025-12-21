@@ -294,6 +294,8 @@ async def refresh_token(
 
     # Create new tokens
     new_access_token = create_access_token(data={"sub": user.email})
+    # Optionally create a new refresh token, or reuse the existing one
+    # For security, generating a new refresh token on each refresh is recommended
     new_refresh_token = create_refresh_token(data={"sub": user.email})
 
     return {

@@ -127,32 +127,36 @@ const SessionBooking = () => {
             // Получаем cinema_id из сеанса
             const cinemaId = sessionData?.hall?.cinema?.id;
 
-            // Передаём cinema_id в запрос
-            const [concessionsData, allCategories] = await Promise.all([
-                concessionsAPI.getConcessionItems({
-                    cinema_id: cinemaId,
-                }),
-                // Fetch all categories sorted by display_order to maintain proper ordering
-                getFoodCategories(),
-            ]);
-
-            // Sort categories by display_order
-            const sortedCategories = allCategories
-                .filter((category) =>
-                    concessionsData.some(
-                        (item) =>
-                            item.category && item.category.id === category.id
-                    )
-                )
-                .sort((a, b) => a.display_order - b.display_order)
-                .map((category) => category.name);
-
+            // Load session and seat data first (these should be public)
             setSession(sessionData);
             setSeats(seatsData.seats ?? []);
-            setConcessions(concessionsData);
 
-            if (sortedCategories.length > 0)
-                setActiveCategory(sortedCategories[0]);
+            // Load concession items using the public endpoint to avoid auth requirement
+            try {
+                const concessionsData = await fetchPublicConcessions(cinemaId);
+                const allCategories = await getFoodCategories();
+
+                // Sort categories by display_order
+                const sortedCategories = allCategories
+                    .filter((category) =>
+                        concessionsData.some(
+                            (item) =>
+                                item.category && item.category.id === category.id
+                        )
+                    )
+                    .sort((a, b) => a.display_order - b.display_order)
+                    .map((category) => category.name);
+
+                setConcessions(concessionsData);
+
+                if (sortedCategories.length > 0)
+                    setActiveCategory(sortedCategories[0]);
+            } catch (concessionErr) {
+                console.error("Error loading concession items:", concessionErr);
+                // Continue with empty concessions, user can still book tickets
+                setConcessions([]);
+                setActiveCategory("");
+            }
 
             setError(null);
         } catch (err) {
@@ -160,6 +164,19 @@ const SessionBooking = () => {
             setError("Не удалось загрузить информацию о сеансе");
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Function to fetch concession items using the public endpoint
+    const fetchPublicConcessions = async (cinemaId) => {
+        // Use the new public API method that avoids auth redirect
+        try {
+            return await concessionsAPI.getPublicConcessionItems({
+                cinema_id: cinemaId
+            });
+        } catch (err) {
+            console.error("Public concession API failed:", err);
+            return [];
         }
     };
 
