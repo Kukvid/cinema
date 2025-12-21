@@ -244,42 +244,119 @@ const SeatManagement = () => {
         >
           Управление местами
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          {/* Cinema filter dropdown */}
-          {user.role === 'admin' || user.role === 'super_admin' ? (
-            <FormControl sx={{ minWidth: 200 }}>
-              <InputLabel>Кинотеатр</InputLabel>
-              <Select
-                value={selectedCinema}
-                label="Кинотеатр"
-                onChange={(e) => setSelectedCinema(e.target.value)}
-              >
-                <MenuItem value="">
-                  <em>Все кинотеатры</em>
-                </MenuItem>
-                {cinemas.map((cinema) => (
-                  <MenuItem key={cinema.id} value={cinema.id}>
-                    {cinema.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          ) : null}
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog()}
-            sx={{
-              background: 'linear-gradient(135deg, #e50914 0%, #b00710 100%)',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)',
-              },
-            }}
-          >
-            Добавить место
-          </Button>
-        </Box>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => handleOpenDialog()}
+          sx={{
+            background: 'linear-gradient(135deg, #e50914 0%, #b00710 100%)',
+            '&:hover': {
+              background: 'linear-gradient(135deg, #ff1a1a 0%, #cc0812 100%)',
+            },
+          }}
+        >
+          Добавить место
+        </Button>
       </Box>
+      {/* Cinema Filter for Super Admin */}
+      {user.role === 'super_admin' && (
+        <Paper
+          sx={{
+            p: 2,
+            mb: 3,
+            background:
+              "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+          }}
+        >
+          <Grid
+            container
+            spacing={2}
+            alignItems="center"
+          >
+            <Grid
+              item
+              xs={12}
+              md={6}
+            >
+              <FormControl
+                fullWidth
+                variant="outlined"
+              >
+                <InputLabel>
+                  Фильтр по кинотеатру
+                </InputLabel>
+                <Select
+                  value={selectedCinema}
+                  onChange={(e) =>
+                    setSelectedCinema(e.target.value)
+                  }
+                  label="Фильтр по кинотеатру"
+                >
+                  <MenuItem value="">
+                    Все кинотеатры
+                  </MenuItem>
+                  {cinemas.map((cinema) => (
+                    <MenuItem
+                      key={cinema.id}
+                      value={cinema.id}
+                    >
+                      {cinema.name} - {cinema.city}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid
+              item
+              xs={12}
+              md={6}
+            >
+              <Typography
+                variant="body2"
+                color="text.secondary"
+              >
+                {selectedCinema
+                  ? `Показаны места для кинотеатра: ${cinemas.find((c) => c.id === parseInt(selectedCinema))?.name || ""}`
+                  : "Показаны места по всем кинотеатрам"}
+              </Typography>
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
+
+      {/* For admin user, show their cinema */}
+      {user.role === 'admin' && (
+        <Paper
+          sx={{
+            p: 2,
+            mb: 3,
+            background:
+              "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+          }}
+        >
+          <Grid
+            container
+            spacing={2}
+            alignItems="center"
+          >
+            <Grid
+              item
+              xs={12}
+            >
+              <Typography variant="body1">
+                Места для кинотеатра:{" "}
+                {cinemas.find(
+                  (c) => c.id === user.cinema_id
+                )?.name || ""}{" "}
+                —{" "}
+                {cinemas.find(
+                  (c) => c.id === user.cinema_id
+                )?.city || ""}
+              </Typography>
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>

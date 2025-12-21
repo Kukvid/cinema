@@ -231,7 +231,7 @@ const SessionsManage = () => {
                             "linear-gradient(135deg, #e50914 0%, #b00710 100%)",
                     }}
                 >
-                    Добавить сеанс
+                    Добавить сеансqwe
                 </Button>
             </Box>
 

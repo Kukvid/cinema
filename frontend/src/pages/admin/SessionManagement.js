@@ -44,6 +44,17 @@ import { hallsAPI } from "../../api/halls";
 import { cinemasAPI } from "../../api/cinemas";
 import Loading from "../../components/Loading";
 
+// Helper function to translate status values to Russian
+const getStatusTranslation = (status) => {
+    const statusTranslations = {
+        SCHEDULED: "Запланирован",
+        ONGOING: "Идет сеанс",
+        COMPLETED: "Завершен",
+        CANCELLED: "Отменен",
+    };
+    return statusTranslations[status] || status; // Return the original status if no translation is found
+};
+
 const SessionManagement = () => {
     const { user } = useAuth();
     const [sessions, setSessions] = useState([]);
@@ -363,7 +374,7 @@ const SessionManagement = () => {
                             },
                         }}
                     >
-                        Добавить сеанс
+                        Добавить сеансss
                     </Button>
                 </Box>
                 {/* Cinema Filter for Super Admin */}
@@ -526,7 +537,7 @@ const SessionManagement = () => {
                                     <TableCell>
                                         {session.ticket_price} ₽
                                     </TableCell>
-                                    <TableCell>{session.status}</TableCell>
+                                    <TableCell>{getStatusTranslation(session.status)}</TableCell>
                                     <TableCell>
                                         <Button
                                             startIcon={<EditIcon />}

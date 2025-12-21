@@ -841,7 +841,9 @@ const FilmsManage = () => {
                             label="Длительность (мин)"
                             margin="normal"
                             type="number"
-                            {...register("duration_minutes")}
+                            {...register("duration_minutes", {
+                                required: "Дллительность обязательна",
+                            })}
                         />
                         <TextField
                             fullWidth
@@ -849,7 +851,9 @@ const FilmsManage = () => {
                             margin="normal"
                             type="number"
                             inputProps={{ min: 1895, max: 2100 }}
-                            {...register("release_year")}
+                            {...register("release_year", {
+                                required: "Год выпуска обязателен",
+                            })}
                         />
                         <TextField
                             fullWidth

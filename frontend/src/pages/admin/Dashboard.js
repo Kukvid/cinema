@@ -126,8 +126,7 @@ const Dashboard = () => {
     const isAdmin = user?.role === "admin";
     const isSuperAdmin = user?.role === "super_admin";
     let stats = [];
-    if (isStaff) {
-        stats = dashboardStats; // Staff users get the dynamic stats from API
+    if (isStaff) { // Staff users get the dynamic stats from API
     } else {
         stats = dashboardStats; // Non-staff users also get dynamic stats from API
     }

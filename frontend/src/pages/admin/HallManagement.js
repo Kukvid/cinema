@@ -43,12 +43,14 @@ import { useAuth } from "../../context/AuthContext";
 const HallManagement = () => {
     const { user: currentUser } = useAuth();
     const [halls, setHalls] = useState([]);
+    const [filteredHalls, setFilteredHalls] = useState([]);
     const [cinemas, setCinemas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingHall, setEditingHall] = useState(null);
     const [expandedHall, setExpandedHall] = useState(null);
+    const [selectedCinemaId, setSelectedCinemaId] = useState("");
     const [formData, setFormData] = useState({
         cinema_id: "",
         name: "",
@@ -60,6 +62,15 @@ const HallManagement = () => {
         loadData();
     }, []);
 
+    // Apply filtering when halls or selected cinema ID changes
+    useEffect(() => {
+        if (selectedCinemaId) {
+            setFilteredHalls(halls.filter(hall => hall.cinema_id === parseInt(selectedCinemaId)));
+        } else {
+            setFilteredHalls(halls);
+        }
+    }, [halls, selectedCinemaId]);
+
     const loadData = async () => {
         try {
             setLoading(true);
@@ -69,16 +80,16 @@ const HallManagement = () => {
             ]);
 
             // For staff, filter halls to only show halls from their cinema
-            let filteredHalls = hallsData;
+            let processedHalls = hallsData;
 
             if (currentUser?.role === "staff" && currentUser?.cinema_id) {
-                filteredHalls = hallsData.filter((hall) => {
+                processedHalls = hallsData.filter((hall) => {
                     // Match halls with the staff's cinema
                     return hall.cinema_id === currentUser.cinema_id;
                 });
             }
 
-            setHalls(filteredHalls);
+            setHalls(processedHalls);
             setCinemas(cinemasData);
         } catch (err) {
             setError("Не удалось загрузить данные");
@@ -189,18 +200,55 @@ const HallManagement = () => {
                     mb: 4,
                 }}
             >
-                <Typography
-                    variant="h4"
+                <Box
                     sx={{
-                        fontWeight: 700,
-                        background:
-                            "linear-gradient(135deg, #e50914 0%, #ffd700 100%)",
-                        WebkitBackgroundClip: "text",
-                        WebkitTextFillColor: "transparent",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 2,
                     }}
                 >
-                    Управление залами
-                </Typography>
+                    <Typography
+                        variant="h4"
+                        sx={{
+                            fontWeight: 700,
+                            background:
+                                "linear-gradient(135deg, #e50914 0%, #ffd700 100%)",
+                            WebkitBackgroundClip: "text",
+                            WebkitTextFillColor: "transparent",
+                        }}
+                    >
+                        Управление залами
+                    </Typography>
+                    {(currentUser?.role === "admin" || currentUser?.role === "super_admin") && (
+                        <FormControl
+                            fullWidth
+                            size="small"
+                            sx={{ minWidth: 200 }}
+                        >
+                            <InputLabel>Кинотеатр</InputLabel>
+                            <Select
+                                value={selectedCinemaId}
+                                label="Кинотеатр"
+                                onChange={(e) => setSelectedCinemaId(e.target.value)}
+                            >
+                                <MenuItem value="">Все</MenuItem>
+                                {cinemas
+                                    .filter(cinema =>
+                                        currentUser?.role === "super_admin" ||
+                                        cinema.id === currentUser?.cinema_id
+                                    )
+                                    .map((cinema) => (
+                                        <MenuItem
+                                            key={cinema.id}
+                                            value={cinema.id}
+                                        >
+                                            {cinema.name}
+                                        </MenuItem>
+                                    ))}
+                            </Select>
+                        </FormControl>
+                    )}
+                </Box>
                 <Button
                     variant="contained"
                     startIcon={<AddIcon />}
@@ -241,7 +289,7 @@ const HallManagement = () => {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {halls.map((hall) => (
+                        {filteredHalls.map((hall) => (
                             <TableRow key={hall.id}>
                                 <TableCell>{hall.id}</TableCell>
                                 <TableCell>

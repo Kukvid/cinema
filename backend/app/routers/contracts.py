@@ -69,7 +69,7 @@ async def get_available_cinemas(
     db: AsyncSession = Depends(get_db)
 ):
     """Get available cinemas based on user role - admin gets only their cinema, super_admin gets all."""
-    if current_user.role.name == "admin":
+    if current_user.role.name in ["admin", "staff"]:
         # Admin can only see their assigned cinema
         result = await db.execute(select(Cinema).filter(Cinema.id == current_user.cinema_id))
         cinema = result.scalar_one_or_none()
@@ -571,6 +571,9 @@ async def get_all_payments(
         # If no cinema ID provided, use admin's assigned cinema
         if current_user.cinema_id:
             query = query.filter(RentalContract.cinema_id == current_user.cinema_id)
+
+    elif current_user.role.name == "super_admin" and cinema_id:
+        query = query.filter(RentalContract.cinema_id == cinema_id)
     # For super admin users, show all payments
     # No filter is applied for super_admin, they see all payments
 

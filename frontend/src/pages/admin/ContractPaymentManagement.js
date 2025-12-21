@@ -30,8 +30,9 @@ const ContractPaymentManagement = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [cinemas, setCinemas] = useState([]);
-    const [selectedCinema, setSelectedCinema] = useState("");
-    const [cinemaFilter, setCinemaFilter] = useState("");
+    const [cinemaFilter, setCinemaFilter] = useState(
+        user.role === "admin" ? user.cinema_id : ""
+    );
 
     useEffect(() => {
         loadCinemas();
@@ -43,14 +44,12 @@ const ContractPaymentManagement = () => {
             if (user.role === "super_admin") {
                 const cinemasData = await cinemasAPI.getCinemas();
                 setCinemas(cinemasData);
-            } else if (user.cinema_id) {
+            } else if (user.role === "admin" && user.cinema_id) {
                 // For admin users, get only their cinema
                 const cinemaData = await cinemasAPI.getCinemaById(
                     user.cinema_id
                 );
                 setCinemas([cinemaData]);
-                setSelectedCinema(user.cinema_id);
-                setCinemaFilter(user.cinema_id);
             }
         } catch (err) {
             console.error("Error loading cinemas:", err);
@@ -63,13 +62,12 @@ const ContractPaymentManagement = () => {
             setError(null);
 
             let paymentsData;
-            if (user.role === "super_admin" && cinemaFilter) {
+            if (user.role === "admin") {
+                // Admin users see only their cinema's payments
+                paymentsData = await contractsAPI.getAllPayments(user.cinema_id);
+            } else if (user.role === "super_admin" && cinemaFilter) {
                 // Super admin with cinema filter
                 paymentsData = await contractsAPI.getAllPayments(cinemaFilter);
-            } else if (user.role === "admin") {
-                // Admin users see only their cinema's payments
-                paymentsData =
-                    await contractsAPI.getAllPayments(selectedCinema);
             } else if (user.role === "super_admin") {
                 // Super admin without filter sees all payments
                 paymentsData = await contractsAPI.getAllPayments();
@@ -167,7 +165,7 @@ const ContractPaymentManagement = () => {
             {user.role === "super_admin" && (
                 <Paper
                     sx={{
-                        p: 3,
+                        p: 2,
                         mb: 3,
                         background:
                             "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
@@ -186,15 +184,18 @@ const ContractPaymentManagement = () => {
                             <FormControl
                                 fullWidth
                                 variant="outlined"
-                                size="small"
                             >
-                                <InputLabel>Фильтр по кинотеатру</InputLabel>
+                                <InputLabel>
+                                    Фильтр по кинотеатру
+                                </InputLabel>
                                 <Select
                                     value={cinemaFilter}
                                     onChange={handleCinemaChange}
                                     label="Фильтр по кинотеатру"
                                 >
-                                    <MenuItem value="">Все кинотеатры</MenuItem>
+                                    <MenuItem value="">
+                                        Все кинотеатры
+                                    </MenuItem>
                                     {cinemas.map((cinema) => (
                                         <MenuItem
                                             key={cinema.id}
@@ -218,6 +219,40 @@ const ContractPaymentManagement = () => {
                                 {cinemaFilter
                                     ? `Показаны платежи для кинотеатра: ${cinemas.find((c) => c.id === parseInt(cinemaFilter))?.name || ""}`
                                     : "Показаны все платежи по всем кинотеатрам"}
+                            </Typography>
+                        </Grid>
+                    </Grid>
+                </Paper>
+            )}
+
+            {/* For admin user, show their cinema */}
+            {user.role === "admin" && (
+                <Paper
+                    sx={{
+                        p: 2,
+                        mb: 3,
+                        background:
+                            "linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)",
+                    }}
+                >
+                    <Grid
+                        container
+                        spacing={2}
+                        alignItems="center"
+                    >
+                        <Grid
+                            item
+                            xs={12}
+                        >
+                            <Typography variant="body1">
+                                Платежи для кинотеатра:{" "}
+                                {cinemas.find(
+                                    (c) => c.id === user.cinema_id
+                                )?.name || ""}{" "}
+                                —{" "}
+                                {cinemas.find(
+                                    (c) => c.id === user.cinema_id
+                                )?.city || ""}
                             </Typography>
                         </Grid>
                     </Grid>

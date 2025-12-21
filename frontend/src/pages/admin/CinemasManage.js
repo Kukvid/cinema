@@ -345,7 +345,8 @@ const CinemasManage = () => {
                                         "Долгота должна быть от -180 до 180"
                                     );
                                 },
-                            })}поле 
+                            })}
+                            поле
                             error={!!errors.longitude}
                             helperText={errors.longitude?.message}
                         />
@@ -355,7 +356,9 @@ const CinemasManage = () => {
                             margin="normal"
                             type="date"
                             InputLabelProps={{ shrink: true }}
-                            {...register("opening_date")}
+                            {...register("opening_date", {
+                                required: "Дата открытия обязательна",
+                            })}
                         />
                         <FormControl
                             fullWidth

@@ -19,7 +19,7 @@ router = APIRouter()
 @router.get("", response_model=List[SeatResponse])
 async def get_seats(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
+    limit: int = Query(1000, ge=1, le=1000),
     cinema_id: int | None = Query(None, description="Filter by cinema ID"),
     hall_id: int | None = Query(None, description="Filter by hall ID"),
     row_number: int | None = Query(None, description="Filter by row number"),
@@ -38,7 +38,7 @@ async def get_seats(
     query = select(Seat).options(selectinload(Seat.hall))
 
     # Apply filters
-    if cinema_id:
+    if cinema_id and current_user.role and current_user.role.name == "admin":
         query = query.join(Hall).filter(Hall.cinema_id == cinema_id)
 
     if hall_id:
@@ -59,7 +59,7 @@ async def get_seats(
 @router.get("/with-cinema", response_model=List[SeatWithCinemaResponse])
 async def get_seats_with_cinema(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
+    limit: int = Query(1000, ge=1, le=1000),
     cinema_id: int | None = Query(None, description="Filter by cinema ID"),
     hall_id: int | None = Query(None, description="Filter by hall ID"),
     row_number: int | None = Query(None, description="Filter by row number"),

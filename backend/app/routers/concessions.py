@@ -43,7 +43,7 @@ async def get_concession_items(
     if status_filter:
         query = query.filter(ConcessionItem.status == status_filter)
 
-    if current_user.role and current_user.role.name in [UserRoles.staff, UserRoles.admin]:
+    if current_user.role and current_user.role.name in [UserRoles.staff, UserRoles.admin, UserRoles.staff]:
         query = query.filter(ConcessionItem.cinema_id == current_user.cinema_id)
 
     query = query.order_by(ConcessionItem.name.asc()).offset(skip).limit(limit)

@@ -50,7 +50,7 @@ const ConcessionManagement = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [selectedCinema, setSelectedCinema] = useState(
-    currentUser?.role === "admin" ? currentUser.cinema_id : ""
+    (currentUser?.role === "admin" || currentUser?.role === "staff") ? currentUser.cinema_id : ""
   );
   const [formLoading, setFormLoading] = useState(false);
 
@@ -87,14 +87,8 @@ const ConcessionManagement = () => {
       }
       const itemsData = await concessionsAPI.getConcessionItems(itemsParams);
 
-      // For staff, filter items to only show items from their cinema
-      let filteredItems = itemsData;
-
-      if (currentUser?.role === 'staff' && currentUser?.cinema_id) {
-        filteredItems = itemsData.filter(item => item.cinema_id === currentUser.cinema_id);
-      }
-
-      setItems(filteredItems);
+      // Для staff теперь не фильтруем - используем логику как у admin
+      setItems(itemsData);
       setCategories(categoriesData);
       setError(null);
     } catch (err) {
@@ -128,7 +122,8 @@ const ConcessionManagement = () => {
         portion_size: '',
         calories: '',
         category_id: '',
-        cinema_id: currentUser?.role === "admin" ? currentUser.cinema_id : cinemas.length > 0 ? cinemas[0].id : '',
+        // Для staff и admin используем их cinema_id по умолчанию
+        cinema_id: (currentUser?.role === "admin" || currentUser?.role === "staff") ? currentUser.cinema_id : cinemas.length > 0 ? cinemas[0].id : '',
         status: 'AVAILABLE', // Default to AVAILABLE status
         stock_quantity: 0,
         image_url: ''
@@ -209,8 +204,8 @@ const ConcessionManagement = () => {
           Управление кинобаром
         </Typography>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          {/* Cinema filter dropdown */}
-          {currentUser?.role === 'admin' || currentUser?.role === 'super_admin' ? (
+          {/* Cinema filter dropdown для admin и staff */}
+          {(currentUser?.role === 'admin' || currentUser?.role === 'staff' || currentUser?.role === 'super_admin') ? (
             <FormControl sx={{ minWidth: 200 }}>
               <InputLabel>Кинотеатр</InputLabel>
               <Select

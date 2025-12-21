@@ -15,12 +15,17 @@ router = APIRouter()
 
 @router.get("/with-cinema", response_model=List[HallWithCinemaResponse])
 async def get_halls_with_cinema(
+    current_user: Annotated[User, Depends(get_current_active_user)],
     cinema_id: int | None = Query(None, description="Filter by cinema ID"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     db: AsyncSession = Depends(get_db)
 ):
     """Get list of halls with cinema information, optionally filtered by cinema."""
+
+    # Determine if user is super_admin (no filtering needed)
+    is_super_admin = current_user.role and current_user.role.name == "super_admin"
+
     query = select(
         Hall.id,
         Hall.hall_number,
@@ -33,6 +38,19 @@ async def get_halls_with_cinema(
         Cinema.city.label('cinema_city')
     ).join(Cinema, Hall.cinema_id == Cinema.id)
 
+    # Only apply user-based filtering if user is not super_admin
+    if not is_super_admin:
+        if current_user.role and current_user.role.name == "admin":
+            # Admins can only see halls from their assigned cinema
+            query = query.filter(Hall.cinema_id == current_user.cinema_id)
+        elif current_user.role and current_user.role.name == "staff":
+            # Staff can only see halls from their assigned cinema
+            query = query.filter(Hall.cinema_id == current_user.cinema_id)
+        else:
+            # For regular users or users without roles, return empty result
+            query = query.filter(Hall.id == -1)  # No results for unauthorized users
+
+    # Additional filter by specific cinema_id if provided
     if cinema_id:
         query = query.filter(Hall.cinema_id == cinema_id)
 
@@ -61,14 +79,32 @@ async def get_halls_with_cinema(
 
 @router.get("", response_model=List[HallResponse])
 async def get_halls(
+    current_user: Annotated[User, Depends(get_current_active_user)],
     cinema_id: int | None = Query(None, description="Filter by cinema ID"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     db: AsyncSession = Depends(get_db)
 ):
     """Get list of halls, optionally filtered by cinema."""
+
+    # Determine if user is super_admin (no filtering needed)
+    is_super_admin = current_user.role and current_user.role.name == "super_admin"
+
     query = select(Hall)
 
+    # Only apply user-based filtering if user is not super_admin
+    if not is_super_admin:
+        if current_user.role and current_user.role.name == "admin":
+            # Admins can only see halls from their assigned cinema
+            query = query.filter(Hall.cinema_id == current_user.cinema_id)
+        elif current_user.role and current_user.role.name == "staff":
+            # Staff can only see halls from their assigned cinema
+            query = query.filter(Hall.cinema_id == current_user.cinema_id)
+        else:
+            # For regular users or users without roles, return empty result
+            query = query.filter(Hall.id == -1)  # No results for unauthorized users
+
+    # Additional filter by specific cinema_id if provided
     if cinema_id:
         query = query.filter(Hall.cinema_id == cinema_id)
 
@@ -106,6 +142,13 @@ async def create_hall(
     """Create a new hall."""
     import re  # Import at the beginning of the function
 
+    # Check user permissions - only admin and super_admin can create halls
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin users can create halls"
+        )
+
     # Verify cinema exists
     result = await db.execute(select(Cinema).filter(Cinema.id == hall_data.cinema_id))
     cinema = result.scalar_one_or_none()
@@ -114,6 +157,13 @@ async def create_hall(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Cinema with id {hall_data.cinema_id} not found"
+        )
+
+    # Check if user has permission to create hall in this cinema
+    if current_user.role.name == "admin" and cinema.id != current_user.cinema_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin can only create halls in their assigned cinema"
         )
 
     # Generate a default hall number if not provided
@@ -205,6 +255,13 @@ async def update_hall(
     db: AsyncSession = Depends(get_db)
 ):
     """Update hall."""
+    # Check user permissions - only admin and super_admin can update halls
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin users can update halls"
+        )
+
     result = await db.execute(select(Hall).filter(Hall.id == hall_id))
     hall = result.scalar_one_or_none()
 
@@ -212,6 +269,13 @@ async def update_hall(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Hall with id {hall_id} not found"
+        )
+
+    # Check if user has permission to update hall in this cinema
+    if current_user.role.name == "admin" and hall.cinema_id != current_user.cinema_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin can only update halls in their assigned cinema"
         )
 
     # Check if hall number already exists in this cinema when updating
@@ -249,6 +313,13 @@ async def delete_hall(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete hall."""
+    # Check user permissions - only admin and super_admin can delete halls
+    if not current_user.role or current_user.role.name not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin users can delete halls"
+        )
+
     result = await db.execute(select(Hall).filter(Hall.id == hall_id))
     hall = result.scalar_one_or_none()
 
@@ -258,7 +329,12 @@ async def delete_hall(
             detail=f"Hall with id {hall_id} not found"
         )
 
+    # Check if user has permission to delete hall in this cinema
+    if current_user.role.name == "admin" and hall.cinema_id != current_user.cinema_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin can only delete halls in their assigned cinema"
+        )
+
     await db.delete(hall)
     await db.commit()
-
-    return None
